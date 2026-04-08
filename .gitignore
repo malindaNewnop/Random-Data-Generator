@@ -14,6 +14,14 @@
 *.app
 !DataSyncer.TestDataGenerator.App/
 !DataSyncer.TestDataGenerator.App/**
+# .NET build outputs and user files
+**/bin/
+**/obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+logs/
 #Rapid Application Development File
 rad.json
 #Translation Base-file
