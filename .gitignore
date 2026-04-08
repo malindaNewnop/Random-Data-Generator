@@ -12,6 +12,8 @@
 .output/
 #Extension App-file
 *.app
+!DataSyncer.TestDataGenerator.App/
+!DataSyncer.TestDataGenerator.App/**
 #Rapid Application Development File
 rad.json
 #Translation Base-file
