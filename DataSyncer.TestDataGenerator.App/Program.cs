@@ -14,7 +14,7 @@ static class Program
 
         var configurationService = new Services.ConfigurationService(AppContext.BaseDirectory);
         var settings = configurationService.Load();
-        var logService = new Services.FileLogService(Path.Combine(AppContext.BaseDirectory, "logs"));
+        var logService = new Services.FileLogService(settings.OutputRootFolder);
 
         Application.Run(new Form1(settings, configurationService, logService));
     }    

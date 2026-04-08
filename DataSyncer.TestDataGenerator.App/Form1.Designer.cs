@@ -30,8 +30,8 @@ partial class Form1
     {
         this.components = new System.ComponentModel.Container();
         this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-        this.ClientSize = new System.Drawing.Size(1360, 840);
-        this.MinimumSize = new System.Drawing.Size(1100, 700);
+        this.ClientSize = new System.Drawing.Size(1440, 900);
+        this.MinimumSize = new System.Drawing.Size(980, 640);
         this.Name = "Form1";
         this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
         this.Text = "DataSyncer Test Data Generator";

@@ -15,6 +15,8 @@ public sealed class ConfigurationService
         _appRoot = appRoot;
     }
 
+    public string ConfigurationFilePath => ResolvePath();
+
     public AppSettings Load()
     {
         var filePath = ResolvePath();
@@ -27,7 +29,14 @@ public sealed class ConfigurationService
 
         var raw = File.ReadAllText(filePath);
         var parsed = JsonSerializer.Deserialize<AppSettings>(raw);
-        return parsed ?? new AppSettings();
+        var settings = parsed ?? new AppSettings();
+
+        if (settings.NormalizeOutputRootFolder())
+        {
+            Save(settings);
+        }
+
+        return settings;
     }
 
     public void Save(AppSettings settings)
