@@ -31,7 +31,14 @@ public sealed class ConfigurationService
         var parsed = JsonSerializer.Deserialize<AppSettings>(raw);
         var settings = parsed ?? new AppSettings();
 
+        var changed = settings.NormalizeSqlConnectionString();
+
         if (settings.NormalizeOutputRootFolder())
+        {
+            changed = true;
+        }
+
+        if (changed)
         {
             Save(settings);
         }

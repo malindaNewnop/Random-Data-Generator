@@ -236,6 +236,7 @@ public partial class Form1
         _cmbDbToDbS2ConflictBehavior = new ComboBox
         {
             DropDownStyle = ComboBoxStyle.DropDownList,
+            Anchor = AnchorStyles.Left | AnchorStyles.Right,
             Width = 220,
             Margin = new Padding(0, 0, 12, 12)
         };
@@ -673,7 +674,7 @@ public partial class Form1
         {
             Text = text,
             AutoSize = true,
-            MaximumSize = new Size(280, 0),
+            MaximumSize = new Size(720, 0),
             ForeColor = MutedText,
             Margin = new Padding(0, 8, 0, 12)
         };

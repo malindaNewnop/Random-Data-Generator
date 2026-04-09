@@ -3,8 +3,9 @@ namespace DataSyncer.TestDataGenerator.App.Models;
 public sealed class AppSettings
 {
     public const string LegacyDefaultOutputRootFolder = @"D:\DataSyncerTest\GeneratedData";
+    public const string LegacyDefaultSqlConnectionString = "Server=localhost;Database=DSTest;Trusted_Connection=True;TrustServerCertificate=True;";
 
-    public string SqlConnectionString { get; set; } = "Server=localhost;Database=DSTest;Trusted_Connection=True;TrustServerCertificate=True;";
+    public string SqlConnectionString { get; set; } = GetRecommendedSqlConnectionString();
 
     public string OutputRootFolder { get; set; } = GetRecommendedOutputRootFolder();
 
@@ -33,6 +34,32 @@ public sealed class AppSettings
     public string FileSyncDownloadPrefix { get; set; } = "download_";
 
     public string FileSyncTwoWayPrefix { get; set; } = "twoway_";
+
+    public static string GetRecommendedSqlConnectionString()
+    {
+        return "Server=" + Environment.MachineName + ";Database=DataSyncer_Test;Trusted_Connection=True;TrustServerCertificate=True;Encrypt=False;";
+    }
+
+    public bool NormalizeSqlConnectionString()
+    {
+        var normalizedConnection = Environment.ExpandEnvironmentVariables(SqlConnectionString?.Trim() ?? string.Empty);
+        var changed = !string.Equals(SqlConnectionString, normalizedConnection, StringComparison.Ordinal);
+        SqlConnectionString = normalizedConnection;
+
+        if (string.IsNullOrWhiteSpace(SqlConnectionString))
+        {
+            SqlConnectionString = GetRecommendedSqlConnectionString();
+            return true;
+        }
+
+        if (string.Equals(SqlConnectionString, LegacyDefaultSqlConnectionString, StringComparison.OrdinalIgnoreCase))
+        {
+            SqlConnectionString = GetRecommendedSqlConnectionString();
+            return true;
+        }
+
+        return changed;
+    }
 
     public static string GetRecommendedOutputRootFolder()
     {

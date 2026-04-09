@@ -40,7 +40,7 @@ public partial class Form1 : Form
     private readonly ConfigurationService _configurationService;
     private readonly FileLogService _logService;
     private readonly ToolTip _toolTip = new();
-    private readonly Dictionary<string, Button> _navButtons = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, NavigationItem> _navButtons = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Control> _pages = new(StringComparer.Ordinal);
 
     private TableLayoutPanel? _rootLayout;
@@ -84,6 +84,11 @@ public partial class Form1 : Form
     private DateTimePicker? _dtCsvBase;
     private ComboBox? _cmbCsvScenario;
     private Label? _lblCsvStatus;
+    private ComboBox? _cmbCsvScheduleMode;
+    private DateTimePicker? _dtCsvScheduleAt;
+    private NumericUpDown? _numCsvScheduleIntervalMinutes;
+    private ComboBox? _cmbCsvScheduleTarget;
+    private Label? _lblCsvScheduleStatus;
     private TextBox? _txtCsvS1OutputFilename;
     private NumericUpDown? _numCsvS1RowCount;
     private TextBox? _txtCsvS1KeyStart;
@@ -101,6 +106,12 @@ public partial class Form1 : Form
     private TextBox? _txtCsvS3VariantFilename;
 
     private RichTextBox? _logViewer;
+    private readonly System.Windows.Forms.Timer _csvScheduleTimer = new() { Interval = 1000 };
+    private DateTime? _csvScheduledRunAt;
+    private CsvScheduleMode _armedCsvScheduleMode = CsvScheduleMode.OneTime;
+    private TimeSpan? _csvScheduleInterval;
+    private CsvAutomationExecutionContext? _csvAutomationExecutionContext;
+    private int _csvAutomationRunSequence;
     private bool _settingsDirty;
     private bool _suppressSettingsChangedEvents;
 
@@ -121,6 +132,7 @@ public partial class Form1 : Form
 
         ConfigureTooltips();
         BuildUi();
+        _csvScheduleTimer.Tick += (_, _) => HandleCsvScheduleTick();
         ApplyResponsiveShellLayout();
         LoadSettingsIntoInputs();
         UpdateDashboardSummary();
@@ -264,12 +276,12 @@ public partial class Form1 : Form
             Dock = DockStyle.Fill,
             FixedPanel = FixedPanel.Panel1,
             IsSplitterFixed = false,
-            SplitterDistance = 320,
+            SplitterDistance = 380,
             SplitterWidth = 1,
             BackColor = CardBorder
         };
 
-        _mainSplitContainer.Panel1MinSize = 280;
+        _mainSplitContainer.Panel1MinSize = 330;
         _mainSplitContainer.Panel1.BackColor = NavBackground;
         _mainSplitContainer.Panel2.BackColor = ShellBackground;
         _mainSplitContainer.Resize += (_, _) => ApplyResponsiveShellLayout();
@@ -280,7 +292,7 @@ public partial class Form1 : Form
         _contentHost = new Panel
         {
             Dock = DockStyle.Fill,
-            Padding = new Padding(22),
+            Padding = new Padding(20),
             BackColor = ShellBackground
         };
         _mainSplitContainer.Panel2.Controls.Add(_contentHost);
@@ -339,7 +351,7 @@ public partial class Form1 : Form
         {
             Text = "Shell, settings, dashboard, and log viewer are ready for the next scenario generators.",
             AutoSize = true,
-            MaximumSize = new Size(280, 0),
+            MaximumSize = new Size(340, 0),
             ForeColor = Color.FromArgb(203, 213, 225),
             Margin = new Padding(0, 6, 0, 0)
         });
@@ -383,27 +395,63 @@ public partial class Form1 : Form
 
     private void AddNavigationButton(FlowLayoutPanel host, string key, string title, string subtitle)
     {
-        var button = new Button
+        var card = new Panel
         {
-            Width = 256,
-            Height = 68,
+            Width = 310,
+            Height = 86,
             Margin = new Padding(0, 0, 0, 10),
-            FlatStyle = FlatStyle.Flat,
-            TextAlign = ContentAlignment.MiddleLeft,
-            Padding = new Padding(14, 0, 12, 0),
-            Text = title + Environment.NewLine + subtitle,
-            Font = new Font("Segoe UI", 9.5F, FontStyle.Regular),
             Cursor = Cursors.Hand,
-            AutoEllipsis = true,
-            UseVisualStyleBackColor = false
+            BackColor = NavButtonBackground,
+            Padding = new Padding(16, 12, 16, 12)
+        };
+        card.Paint += DrawRoundedCard;
+
+        var titleLabel = new Label
+        {
+            Text = title,
+            AutoSize = true,
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI Semibold", 10.5F, FontStyle.Bold),
+            BackColor = Color.Transparent,
+            MaximumSize = new Size(340, 0),
+            Margin = new Padding(0)
         };
 
-        button.FlatAppearance.BorderSize = 0;
-        button.Click += (_, _) => NavigateTo(key);
-        _toolTip.SetToolTip(button, "Open " + title);
+        var subtitleLabel = new Label
+        {
+            Text = subtitle,
+            AutoSize = true,
+            ForeColor = Color.FromArgb(191, 219, 254),
+            Font = new Font("Segoe UI", 8.75F, FontStyle.Regular),
+            BackColor = Color.Transparent,
+            MaximumSize = new Size(340, 0),
+            Margin = new Padding(0, 6, 0, 0)
+        };
 
-        _navButtons[key] = button;
-        host.Controls.Add(button);
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            BackColor = Color.Transparent
+        };
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.Controls.Add(titleLabel, 0, 0);
+        layout.Controls.Add(subtitleLabel, 0, 1);
+        card.Controls.Add(layout);
+
+        void Navigate(object? _, EventArgs __) => NavigateTo(key);
+
+        card.Click += Navigate;
+        layout.Click += Navigate;
+        titleLabel.Click += Navigate;
+        subtitleLabel.Click += Navigate;
+
+        _toolTip.SetToolTip(card, "Open " + title);
+
+        _navButtons[key] = new NavigationItem(card, titleLabel, subtitleLabel);
+        host.Controls.Add(card);
     }
 
     private Control CreateStatusBar()
@@ -511,13 +559,15 @@ public partial class Form1 : Form
             AutoSize = true,
             Margin = new Padding(0, 8, 0, 0)
         };
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        var metricCards = new[]
+        {
+            CreateMetricCard("Primary SQL Connection", out _lblDashboardSql),
+            CreateMetricCard("Output Workspace", out _lblDashboardOutput),
+            CreateMetricCard("Remote File Share", out _lblDashboardRemote),
+            CreateMetricCard("Runtime Defaults", out _lblDashboardRuntime)
+        };
 
-        grid.Controls.Add(CreateMetricCard("Primary SQL Connection", out _lblDashboardSql), 0, 0);
-        grid.Controls.Add(CreateMetricCard("Output Workspace", out _lblDashboardOutput), 1, 0);
-        grid.Controls.Add(CreateMetricCard("Remote File Share", out _lblDashboardRemote), 0, 1);
-        grid.Controls.Add(CreateMetricCard("Runtime Defaults", out _lblDashboardRuntime), 1, 1);
+        ConfigureResponsiveCardGrid(card, grid, 920, metricCards);
 
         content.Controls.Add(grid);
         return card;
@@ -574,6 +624,7 @@ public partial class Form1 : Form
 
         stack.Controls.Add(CreateCsvOverviewCard());
         stack.Controls.Add(CreateCsvSharedControlsCard());
+        stack.Controls.Add(CreateCsvAutomationCard());
         stack.Controls.Add(CreateCsvScenario1Card());
         stack.Controls.Add(CreateCsvScenario2Card());
         stack.Controls.Add(CreateCsvScenario3Card());
@@ -638,7 +689,7 @@ public partial class Form1 : Form
             Format = DateTimePickerFormat.Custom,
             CustomFormat = "yyyy-MM-dd HH:mm:ss",
             ShowUpDown = true,
-            Anchor = AnchorStyles.Left,
+            Anchor = AnchorStyles.Left | AnchorStyles.Right,
             Value = _settings.DatetimeBase,
             Margin = new Padding(0, 0, 12, 12),
             AccessibleName = "CSV base datetime"
@@ -651,6 +702,7 @@ public partial class Form1 : Form
         _cmbCsvScenario = new ComboBox
         {
             DropDownStyle = ComboBoxStyle.DropDownList,
+            Anchor = AnchorStyles.Left | AnchorStyles.Right,
             Width = 320,
             Margin = new Padding(0, 0, 12, 12),
             AccessibleName = "Selected CSV scenario"
@@ -694,6 +746,100 @@ public partial class Form1 : Form
         return card;
     }
 
+    private Control CreateCsvAutomationCard()
+    {
+        var card = CreateCard("CSV Automation Timer", "Keep this application open while DataSyncer is running and arm one-time, daily, or interval-based CSV generation. For example, set Every N minutes to 1 to create fresh data every minute automatically.", out var content);
+
+        var grid = CreateCsvFormGrid();
+
+        AddLabelCell(grid, "Automation mode", 0);
+        _cmbCsvScheduleMode = new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Anchor = AnchorStyles.Left | AnchorStyles.Right,
+            Margin = new Padding(0, 0, 12, 12),
+            AccessibleName = "CSV automation mode"
+        };
+        _cmbCsvScheduleMode.Items.AddRange(new object[]
+        {
+            "Run Once At Selected Time",
+            "Repeat Daily At Selected Time",
+            "Repeat Every N Minutes"
+        });
+        _cmbCsvScheduleMode.SelectedIndex = 0;
+        _cmbCsvScheduleMode.SelectedIndexChanged += (_, _) => UpdateCsvAutomationControlState();
+        _toolTip.SetToolTip(_cmbCsvScheduleMode, "Choose whether the CSV scheduler runs once, repeats every day, or repeats every N minutes.");
+        grid.Controls.Add(_cmbCsvScheduleMode, 1, 0);
+
+        AddLabelCell(grid, "Run at", 1);
+        _dtCsvScheduleAt = new DateTimePicker
+        {
+            Format = DateTimePickerFormat.Custom,
+            CustomFormat = "yyyy-MM-dd HH:mm:ss",
+            ShowUpDown = true,
+            Anchor = AnchorStyles.Left | AnchorStyles.Right,
+            Value = DateTime.Now.AddMinutes(5),
+            Margin = new Padding(0, 0, 12, 12),
+            AccessibleName = "CSV scheduled run time"
+        };
+        _toolTip.SetToolTip(_dtCsvScheduleAt, "Date and time used for one-time and daily CSV automation.");
+        grid.Controls.Add(_dtCsvScheduleAt, 1, 1);
+
+        AddLabelCell(grid, "Every N minutes", 2);
+        _numCsvScheduleIntervalMinutes = CreateCsvNumeric(1, 1440, 1, "Interval in minutes for recurring CSV generation.");
+        _numCsvScheduleIntervalMinutes.AccessibleName = "CSV automation interval minutes";
+        grid.Controls.Add(_numCsvScheduleIntervalMinutes, 1, 2);
+
+        AddLabelCell(grid, "Timer target", 3);
+        _cmbCsvScheduleTarget = new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Anchor = AnchorStyles.Left | AnchorStyles.Right,
+            Margin = new Padding(0, 0, 12, 12),
+            AccessibleName = "CSV automation target"
+        };
+        _cmbCsvScheduleTarget.Items.AddRange(new object[]
+        {
+            "Generate Selected Scenario",
+            "Generate All CSV Scenarios"
+        });
+        _cmbCsvScheduleTarget.SelectedIndex = 0;
+        _toolTip.SetToolTip(_cmbCsvScheduleTarget, "Choose whether the timer runs the selected scenario or all CSV scenarios.");
+        grid.Controls.Add(_cmbCsvScheduleTarget, 1, 3);
+
+        content.Controls.Add(grid);
+
+        var actions = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            WrapContents = true,
+            Margin = new Padding(0, 8, 0, 0)
+        };
+        actions.Controls.Add(CreateActionButton("Arm Timer", (_, _) => ArmCsvSchedule(), true));
+        actions.Controls.Add(CreateActionButton("Cancel Timer", (_, _) => CancelCsvSchedule()));
+        actions.Controls.Add(CreateActionButton("Run Target Now", (_, _) => RunCsvScheduledTarget()));
+        content.Controls.Add(actions);
+
+        _lblCsvScheduleStatus = new Label
+        {
+            Text = "Scheduler idle. Choose a mode, then arm the timer.",
+            AutoSize = true,
+            MaximumSize = new Size(1020, 0),
+            ForeColor = MutedText,
+            Margin = new Padding(0, 8, 0, 0)
+        };
+        content.Controls.Add(_lblCsvScheduleStatus);
+
+        content.Controls.Add(CreateInfoNote(
+            "Parallel run note",
+            "This timer works while the generator app is open, so you can leave it running next to DataSyncer and let it create fresh CSV files automatically at a scheduled time or recurring interval.",
+            AccentSoft,
+            AccentColor));
+
+        UpdateCsvAutomationControlState();
+        return card;
+    }
+
     private Control CreateCsvScenario1Card()
     {
         var card = CreateCard("Scenario 1 - Happy Path CSV Import", "Creates a complete CSV with the optional Comment column included and deterministic row values.", out var content);
@@ -708,7 +854,7 @@ public partial class Form1 : Form
         grid.Controls.Add(_numCsvS1RowCount, 1, 1);
 
         AddLabelCell(grid, "Key start", 2);
-        _txtCsvS1KeyStart = CreateCsvTextBox(_settings.CsvIdPrefix + _settings.CsvIdStart.ToString(CultureInfo.InvariantCulture), "Starting RecordId value, for example CSV-100001.");
+        _txtCsvS1KeyStart = CreateCsvTextBox(BuildDailySerialSeed(_settings.DatetimeBase, 1), "Starting Serial value, for example 202604060001.");
         grid.Controls.Add(_txtCsvS1KeyStart, 1, 2);
 
         AddLabelCell(grid, "Include Comment column", 3);
@@ -723,11 +869,11 @@ public partial class Form1 : Form
         grid.Controls.Add(_chkCsvS1IncludeComment, 1, 3);
 
         AddLabelCell(grid, "MachineCode values", 4);
-        _txtCsvS1MachineCodes = CreateCsvTextBox("MC-01, MC-02, MC-03", "Comma-separated MachineCode values.");
+        _txtCsvS1MachineCodes = CreateCsvTextBox("UPR_HSG", "Comma-separated MachineCode values.");
         grid.Controls.Add(_txtCsvS1MachineCodes, 1, 4);
 
         AddLabelCell(grid, "Status values", 5);
-        _txtCsvS1Statuses = CreateCsvTextBox("NEW, RUN, DONE, WAIT", "Comma-separated Status values.");
+        _txtCsvS1Statuses = CreateCsvTextBox("OK", "Comma-separated OK/NG values.");
         grid.Controls.Add(_txtCsvS1Statuses, 1, 5);
 
         content.Controls.Add(grid);
@@ -754,7 +900,7 @@ public partial class Form1 : Form
         grid.Controls.Add(_numCsvS2RowCount, 1, 1);
 
         AddLabelCell(grid, "Key start", 2);
-        _txtCsvS2KeyStart = CreateCsvTextBox("CSV-100021", "Starting RecordId value, for example CSV-100021.");
+        _txtCsvS2KeyStart = CreateCsvTextBox(BuildDailySerialSeed(_settings.DatetimeBase, 21), "Starting Serial value, for example 202604060021.");
         grid.Controls.Add(_txtCsvS2KeyStart, 1, 2);
 
         AddLabelCell(grid, "Omit Comment column", 3);
@@ -792,7 +938,7 @@ public partial class Form1 : Form
         grid.Controls.Add(_numCsvS3RowCount, 1, 1);
 
         AddLabelCell(grid, "Key start", 2);
-        _txtCsvS3KeyStart = CreateCsvTextBox("CSV-101001", "Starting RecordId value for the seed file.");
+        _txtCsvS3KeyStart = CreateCsvTextBox(BuildDailySerialSeed(_settings.DatetimeBase, 1001), "Starting Serial value for the seed file.");
         grid.Controls.Add(_txtCsvS3KeyStart, 1, 2);
 
         AddLabelCell(grid, "Generate variant file", 3);
@@ -863,7 +1009,7 @@ public partial class Form1 : Form
         };
 
         grid.ColumnCount = includeActionColumn ? 3 : 2;
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, includeActionColumn ? 190F : 200F));
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, includeActionColumn ? 220F : 240F));
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
 
         if (includeActionColumn)
@@ -893,7 +1039,7 @@ public partial class Form1 : Form
             Minimum = minimum,
             Maximum = maximum,
             Value = Math.Max(minimum, Math.Min(maximum, value)),
-            Width = 160,
+            Width = 220,
             Margin = new Padding(0, 0, 12, 12)
         };
         _toolTip.SetToolTip(numeric, tooltip);
@@ -984,6 +1130,251 @@ public partial class Form1 : Form
         GenerateCsvScenario4();
     }
 
+    private void ArmCsvSchedule()
+    {
+        if (_dtCsvScheduleAt is null ||
+            _cmbCsvScheduleMode is null ||
+            _numCsvScheduleIntervalMinutes is null ||
+            _cmbCsvScheduleTarget is null)
+        {
+            return;
+        }
+
+        var mode = GetSelectedCsvScheduleMode();
+        var scheduledAt = mode switch
+        {
+            CsvScheduleMode.Daily => ResolveNextCsvScheduledRun(_dtCsvScheduleAt.Value),
+            CsvScheduleMode.EveryNMinutes => DateTime.Now.AddMinutes(decimal.ToDouble(_numCsvScheduleIntervalMinutes.Value)),
+            _ => _dtCsvScheduleAt.Value
+        };
+
+        if (mode == CsvScheduleMode.OneTime && scheduledAt <= DateTime.Now)
+        {
+            MessageBox.Show(
+                "Pick a future time for the CSV scheduler, or switch to a recurring mode to let the app calculate the next run automatically.",
+                "CSV Scheduler",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            return;
+        }
+
+        _armedCsvScheduleMode = mode;
+        _csvScheduleInterval = mode == CsvScheduleMode.EveryNMinutes
+            ? TimeSpan.FromMinutes(decimal.ToDouble(_numCsvScheduleIntervalMinutes.Value))
+            : null;
+        _csvScheduledRunAt = scheduledAt;
+        _csvScheduleTimer.Start();
+        UpdateCsvScheduleStatus();
+
+        _logService.LogInfo(
+            "CSV scheduler armed for " +
+            scheduledAt.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) +
+            " | " + GetCsvScheduleTargetLabel() +
+            " | " + GetArmedCsvScheduleModeLabel());
+        RefreshLogViewer();
+        WriteStatus("CSV scheduler armed");
+    }
+
+    private void CancelCsvSchedule()
+    {
+        _csvScheduleTimer.Stop();
+        _csvScheduledRunAt = null;
+        _csvScheduleInterval = null;
+        _armedCsvScheduleMode = CsvScheduleMode.OneTime;
+        UpdateCsvScheduleStatus();
+        _logService.LogInfo("CSV scheduler canceled");
+        RefreshLogViewer();
+        WriteStatus("CSV scheduler canceled");
+    }
+
+    private void HandleCsvScheduleTick()
+    {
+        if (!_csvScheduledRunAt.HasValue)
+        {
+            _csvScheduleTimer.Stop();
+            UpdateCsvScheduleStatus();
+            return;
+        }
+
+        if (DateTime.Now < _csvScheduledRunAt.Value)
+        {
+            UpdateCsvScheduleStatus();
+            return;
+        }
+
+        RunCsvScheduledTarget();
+
+        if (_armedCsvScheduleMode == CsvScheduleMode.Daily)
+        {
+            _csvScheduledRunAt = ResolveNextCsvScheduledRun(_csvScheduledRunAt.Value.AddDays(1));
+            _csvScheduleTimer.Start();
+        }
+        else if (_armedCsvScheduleMode == CsvScheduleMode.EveryNMinutes && _csvScheduleInterval.HasValue)
+        {
+            _csvScheduledRunAt = ResolveNextCsvRecurringRun(_csvScheduledRunAt.Value, _csvScheduleInterval.Value);
+            _csvScheduleTimer.Start();
+        }
+        else
+        {
+            _csvScheduleTimer.Stop();
+            _csvScheduledRunAt = null;
+            _csvScheduleInterval = null;
+        }
+
+        UpdateCsvScheduleStatus();
+    }
+
+    private void RunCsvScheduledTarget()
+    {
+        _csvAutomationExecutionContext = CreateCsvAutomationExecutionContext();
+        try
+        {
+            var targetLabel = GetCsvScheduleTargetLabel();
+            if (_cmbCsvScheduleTarget?.SelectedIndex == 1)
+            {
+                GenerateAllCsvScenarios();
+            }
+            else
+            {
+                GenerateSelectedCsvScenario();
+            }
+
+            _logService.LogSuccess("CSV scheduler executed: " + targetLabel);
+            RefreshLogViewer();
+            WriteStatus("CSV scheduler executed");
+        }
+        catch (Exception ex)
+        {
+            _logService.LogError("CSV scheduler failed: " + ex.Message);
+            RefreshLogViewer();
+            WriteStatus("CSV scheduler failed");
+
+            MessageBox.Show(
+                "Scheduled CSV generation failed." + Environment.NewLine + Environment.NewLine + ex.Message,
+                "CSV Scheduler",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
+        finally
+        {
+            _csvAutomationExecutionContext = null;
+        }
+    }
+
+    private void UpdateCsvScheduleStatus()
+    {
+        if (_lblCsvScheduleStatus is null)
+        {
+            return;
+        }
+
+        if (!_csvScheduledRunAt.HasValue)
+        {
+            _lblCsvScheduleStatus.Text = "Scheduler idle. Choose a mode, then arm the timer.";
+            _lblCsvScheduleStatus.ForeColor = MutedText;
+            return;
+        }
+
+        var remaining = _csvScheduledRunAt.Value - DateTime.Now;
+        if (remaining < TimeSpan.Zero)
+        {
+            remaining = TimeSpan.Zero;
+        }
+
+        _lblCsvScheduleStatus.Text =
+            "Armed for " + _csvScheduledRunAt.Value.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) +
+            " | " + GetCsvScheduleTargetLabel() +
+            " | " + GetArmedCsvScheduleModeLabel() +
+            Environment.NewLine +
+            "Time remaining: " + remaining.ToString(@"dd\.hh\:mm\:ss", CultureInfo.InvariantCulture);
+        _lblCsvScheduleStatus.ForeColor = AccentColor;
+    }
+
+    private string GetCsvScheduleTargetLabel()
+    {
+        return _cmbCsvScheduleTarget?.SelectedIndex == 1
+            ? "Generate All CSV Scenarios"
+            : "Generate Selected Scenario";
+    }
+
+    private void UpdateCsvAutomationControlState()
+    {
+        var mode = GetSelectedCsvScheduleMode();
+        if (_dtCsvScheduleAt is not null)
+        {
+            _dtCsvScheduleAt.Enabled = mode != CsvScheduleMode.EveryNMinutes;
+        }
+
+        if (_numCsvScheduleIntervalMinutes is not null)
+        {
+            _numCsvScheduleIntervalMinutes.Enabled = mode == CsvScheduleMode.EveryNMinutes;
+        }
+    }
+
+    private CsvScheduleMode GetSelectedCsvScheduleMode()
+    {
+        return _cmbCsvScheduleMode?.SelectedIndex switch
+        {
+            1 => CsvScheduleMode.Daily,
+            2 => CsvScheduleMode.EveryNMinutes,
+            _ => CsvScheduleMode.OneTime
+        };
+    }
+
+    private string GetArmedCsvScheduleModeLabel()
+    {
+        return _armedCsvScheduleMode switch
+        {
+            CsvScheduleMode.Daily => "repeats daily",
+            CsvScheduleMode.EveryNMinutes when _csvScheduleInterval.HasValue =>
+                "every " + FormatCsvIntervalLabel(_csvScheduleInterval.Value),
+            _ => "one-time"
+        };
+    }
+
+    private static DateTime ResolveNextCsvScheduledRun(DateTime requestedTime)
+    {
+        while (requestedTime <= DateTime.Now)
+        {
+            requestedTime = requestedTime.AddDays(1);
+        }
+
+        return requestedTime;
+    }
+
+    private static DateTime ResolveNextCsvRecurringRun(DateTime previousScheduledAt, TimeSpan interval)
+    {
+        if (interval <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(interval), "Recurring CSV interval must be greater than zero.");
+        }
+
+        var nextRun = previousScheduledAt.Add(interval);
+        while (nextRun <= DateTime.Now)
+        {
+            nextRun = nextRun.Add(interval);
+        }
+
+        return nextRun;
+    }
+
+    private CsvAutomationExecutionContext CreateCsvAutomationExecutionContext()
+    {
+        _csvAutomationRunSequence++;
+        if (_csvAutomationRunSequence <= 0)
+        {
+            _csvAutomationRunSequence = 1;
+        }
+
+        return new CsvAutomationExecutionContext(DateTime.Now, _csvAutomationRunSequence);
+    }
+
+    private static string FormatCsvIntervalLabel(TimeSpan interval)
+    {
+        var totalMinutes = Math.Max(1, (int)Math.Round(interval.TotalMinutes, MidpointRounding.AwayFromZero));
+        return totalMinutes.ToString(CultureInfo.InvariantCulture) + (totalMinutes == 1 ? " minute" : " minutes");
+    }
+
     private void GenerateCsvScenario1()
     {
         if (_txtCsvS1OutputFilename is null ||
@@ -1005,7 +1396,7 @@ public partial class Form1 : Form
 
         if (!TryParseKeyStart(_txtCsvS1KeyStart.Text.Trim(), out var prefix, out var startNumber))
         {
-            MessageBox.Show("Scenario 1 key start must be a non-empty value ending in digits, for example CSV-100001.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show("Scenario 1 key start must end in digits, for example 202604060001 or CSV-100001.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
@@ -1048,7 +1439,7 @@ public partial class Form1 : Form
 
         if (!TryParseKeyStart(_txtCsvS2KeyStart.Text.Trim(), out var prefix, out var startNumber))
         {
-            MessageBox.Show("Scenario 2 key start must be a non-empty value ending in digits, for example CSV-100021.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show("Scenario 2 key start must end in digits, for example 202604060021 or CSV-100021.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
@@ -1057,8 +1448,8 @@ public partial class Form1 : Form
             prefix,
             startNumber,
             Decimal.ToInt32(_numCsvS2RowCount.Value),
-            new List<string> { "MC-01", "MC-02", "MC-03" },
-            new List<string> { "NEW", "RUN", "DONE", "WAIT" },
+            new List<string> { "UPR_HSG" },
+            new List<string> { "OK" },
             includeComment,
             GetCsvBaseTime());
 
@@ -1085,7 +1476,7 @@ public partial class Form1 : Form
 
         if (!TryParseKeyStart(_txtCsvS3KeyStart.Text.Trim(), out var prefix, out var startNumber))
         {
-            MessageBox.Show("Scenario 3 key start must be a non-empty value ending in digits, for example CSV-101001.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show("Scenario 3 key start must end in digits, for example 202604061001 or CSV-101001.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
@@ -1095,8 +1486,8 @@ public partial class Form1 : Form
             prefix,
             startNumber,
             rowCount,
-            new List<string> { "MC-01", "MC-02", "MC-03" },
-            new List<string> { "NEW", "RUN", "DONE", "WAIT" },
+            new List<string> { "UPR_HSG" },
+            new List<string> { "OK" },
             includeComment: true,
             baseTime);
 
@@ -1115,7 +1506,7 @@ public partial class Form1 : Form
         }
 
         var duplicateCount = Math.Min(8, seedRows.Count);
-        var variantRows = new List<CsvRow>(duplicateCount + 2);
+        var variantRows = new List<CsvMeasurementRow>(duplicateCount + 2);
 
         for (var i = 0; i < duplicateCount; i++)
         {
@@ -1125,12 +1516,14 @@ public partial class Form1 : Form
         var nextId = startNumber + rowCount;
         for (var i = 0; i < 2; i++)
         {
-            variantRows.Add(new CsvRow(
-                prefix + (nextId + i).ToString(CultureInfo.InvariantCulture),
-                i % 2 == 0 ? "MC-02" : "MC-03",
-                i % 2 == 0 ? "NEW" : "RUN",
+            variantRows.Add(BuildCsvMeasurementRow(
+                prefix,
+                nextId + i,
+                "UPR_HSG",
+                "OK",
                 baseTime.AddMinutes(duplicateCount + i),
-                "Variant Row " + (duplicateCount + i + 1).ToString(CultureInfo.InvariantCulture)));
+                includeComment: true,
+                duplicateCount + i));
         }
 
         WriteCsvToOutput(variantFileName, variantRows, includeComment: true, "CSVtoDB Scenario 3 (variant)");
@@ -1150,27 +1543,30 @@ public partial class Form1 : Form
         var fileCName = "file_C_" + baseDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture) + "_100300.csv";
         var fileRedropName = "file_A_REDROP_" + baseDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture) + "_100300.csv";
 
-        var machineCodes = new List<string> { "MC-01", "MC-02", "MC-03" };
-        var statuses = new List<string> { "NEW", "RUN", "DONE", "WAIT" };
+        var machineCodes = new List<string> { "UPR_HSG" };
+        var statuses = new List<string> { "OK" };
 
-        var rowsA = BuildCsvRows(_settings.CsvIdPrefix, 102001, 10, machineCodes, statuses, includeComment: true, baseDate.AddHours(10));
-        var rowsB = BuildCsvRows(_settings.CsvIdPrefix, 102011, 10, machineCodes, statuses, includeComment: true, baseDate.AddHours(10).AddMinutes(1));
-        var rowsC = BuildCsvRows(_settings.CsvIdPrefix, 102021, 10, machineCodes, statuses, includeComment: true, baseDate.AddHours(10).AddMinutes(3));
+        var rowsA = BuildCsvRows(string.Empty, BuildDailySerialSeedNumber(baseDate, 2001), 10, machineCodes, statuses, includeComment: true, baseDate.AddHours(10));
+        var rowsB = BuildCsvRows(string.Empty, BuildDailySerialSeedNumber(baseDate, 2011), 10, machineCodes, statuses, includeComment: true, baseDate.AddHours(10).AddMinutes(1));
+        var rowsC = BuildCsvRows(string.Empty, BuildDailySerialSeedNumber(baseDate, 2021), 10, machineCodes, statuses, includeComment: true, baseDate.AddHours(10).AddMinutes(3));
 
         WriteCsvToOutput(fileAName, rowsA, includeComment: true, "CSVtoDB Scenario 4 (file A)");
         WriteCsvToOutput(fileBName, rowsB, includeComment: true, "CSVtoDB Scenario 4 (file B)");
         WriteCsvToOutput(fileCName, rowsC, includeComment: true, "CSVtoDB Scenario 4 (file C)");
         WriteCsvToOutput(fileRedropName, rowsA, includeComment: true, "CSVtoDB Scenario 4 (file A redrop)");
 
-        var result = MessageBox.Show(
-            "Scenario 4 files were created in:" + Environment.NewLine + outputFolder + Environment.NewLine + Environment.NewLine + "Open the folder now?",
-            "CSVtoDB Scenario 4",
-            MessageBoxButtons.YesNo,
-            MessageBoxIcon.Information);
-
-        if (result == DialogResult.Yes)
+        if (_csvAutomationExecutionContext is null)
         {
-            OpenPath(outputFolder);
+            var result = MessageBox.Show(
+                "Scenario 4 files were created in:" + Environment.NewLine + outputFolder + Environment.NewLine + Environment.NewLine + "Open the folder now?",
+                "CSVtoDB Scenario 4",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Information);
+
+            if (result == DialogResult.Yes)
+            {
+                OpenPath(outputFolder);
+            }
         }
     }
 
@@ -1214,30 +1610,142 @@ public partial class Form1 : Form
         RefreshLogViewer();
     }
 
-    private List<CsvRow> BuildCsvRows(
+    private List<CsvMeasurementRow> BuildCsvRows(
         string keyPrefix,
-        int startNumber,
+        long startNumber,
         int rowCount,
         IReadOnlyList<string> machineCodes,
         IReadOnlyList<string> statuses,
         bool includeComment,
         DateTime baseTime)
     {
-        var rows = new List<CsvRow>(rowCount);
+        var rows = new List<CsvMeasurementRow>(rowCount);
         for (var i = 0; i < rowCount; i++)
         {
-            var recordId = keyPrefix + (startNumber + i).ToString(CultureInfo.InvariantCulture);
             var machineCode = machineCodes[i % machineCodes.Count];
             var status = statuses[i % statuses.Count];
             var rowTime = baseTime.AddMinutes(i);
-            var comment = includeComment ? "Comment " + (i + 1).ToString(CultureInfo.InvariantCulture) : string.Empty;
-            rows.Add(new CsvRow(recordId, machineCode, status, rowTime, comment));
+            rows.Add(BuildCsvMeasurementRow(
+                keyPrefix,
+                startNumber + i,
+                machineCode,
+                status,
+                rowTime,
+                includeComment,
+                i));
         }
 
         return rows;
     }
 
-    private void WriteCsvToOutput(string fileName, List<CsvRow> rows, bool includeComment, string contextLabel)
+    private CsvMeasurementRow BuildCsvMeasurementRow(
+        string keyPrefix,
+        long serialNumber,
+        string machineCode,
+        string status,
+        DateTime measuredAt,
+        bool includeComment,
+        int rowIndex)
+    {
+        var profile = BuildMeasurementProfile(rowIndex, status);
+        var resolvedPrefix = keyPrefix;
+        var resolvedSerialNumber = serialNumber;
+        if (_csvAutomationExecutionContext is not null)
+        {
+            var runSuffix =
+                _csvAutomationExecutionContext.RunStamp.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture) +
+                "-R" +
+                _csvAutomationExecutionContext.RunSequence.ToString("D3", CultureInfo.InvariantCulture) +
+                "-";
+
+            if (string.IsNullOrWhiteSpace(keyPrefix))
+            {
+                resolvedSerialNumber = (serialNumber * 1000L) + _csvAutomationExecutionContext.RunSequence;
+            }
+            else
+            {
+                resolvedPrefix = keyPrefix + runSuffix;
+            }
+        }
+
+        var serial = resolvedPrefix + resolvedSerialNumber.ToString(CultureInfo.InvariantCulture);
+        var workDate = measuredAt.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+        var measuredAtStamp = measuredAt.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture);
+        var comment = includeComment
+            ? "Sample row " + (rowIndex + 1).ToString(CultureInfo.InvariantCulture)
+            : string.Empty;
+
+        return new CsvMeasurementRow(
+            serial,
+            workDate,
+            measuredAtStamp,
+            machineCode,
+            status,
+            profile.P1,
+            profile.P2,
+            profile.P3,
+            profile.P4,
+            profile.Beta1,
+            profile.Beta2,
+            profile.Beta3,
+            profile.Beta4,
+            profile.Beta5,
+            profile.Beta6,
+            profile.BetaRange,
+            profile.BetaAverage,
+            comment);
+    }
+
+    private static CsvMeasurementProfile BuildMeasurementProfile(int rowIndex, string status)
+    {
+        var pTemplates = new[]
+        {
+            new[] { 13.476m, 13.475m, 10.975m, 10.978m },
+            new[] { 13.476m, 13.474m, 10.973m, 10.977m },
+            new[] { 13.477m, 13.477m, 10.967m, 10.978m },
+            new[] { 13.477m, 13.478m, 10.973m, 10.978m },
+            new[] { 13.475m, 13.476m, 10.971m, 10.977m },
+            new[] { 13.478m, 13.476m, 10.972m, 10.979m }
+        };
+
+        var betaTemplates = new[]
+        {
+            new[] { 38.022m, 38.026m, 38.029m, 38.020m, 38.029m, 38.032m },
+            new[] { 37.998m, 38.018m, 37.993m, 38.000m, 38.004m, 37.996m },
+            new[] { 37.995m, 38.003m, 37.972m, 37.973m, 38.003m, 37.971m },
+            new[] { 38.018m, 38.016m, 37.997m, 37.989m, 37.994m, 37.990m },
+            new[] { 38.004m, 38.008m, 38.011m, 38.007m, 38.010m, 38.013m },
+            new[] { 37.986m, 37.992m, 37.989m, 37.985m, 37.994m, 37.988m }
+        };
+
+        var pValues = pTemplates[rowIndex % pTemplates.Length].ToArray();
+        var betaValues = betaTemplates[rowIndex % betaTemplates.Length].ToArray();
+
+        if (status.Contains("NG", StringComparison.OrdinalIgnoreCase))
+        {
+            pValues[2] = RoundCsvValue(pValues[2] + 0.050m);
+            betaValues[^1] = RoundCsvValue(betaValues[^1] + 0.080m);
+        }
+
+        var betaRange = RoundCsvValue(betaValues.Max() - betaValues.Min());
+        var betaAverage = RoundCsvValue(betaValues.Average());
+
+        return new CsvMeasurementProfile(
+            pValues[0],
+            pValues[1],
+            pValues[2],
+            pValues[3],
+            betaValues[0],
+            betaValues[1],
+            betaValues[2],
+            betaValues[3],
+            betaValues[4],
+            betaValues[5],
+            betaRange,
+            betaAverage);
+    }
+
+    private void WriteCsvToOutput(string fileName, List<CsvMeasurementRow> rows, bool includeComment, string contextLabel)
     {
         var outputFolder = EnsureCsvOutputFolder();
         if (outputFolder is null)
@@ -1245,19 +1753,20 @@ public partial class Form1 : Form
             return;
         }
 
-        var fullPath = Path.Combine(outputFolder, fileName);
-        File.WriteAllText(fullPath, BuildCsvContent(rows, includeComment), new UTF8Encoding(false));
+        var resolvedFileName = ResolveCsvOutputFileName(fileName);
+        var fullPath = Path.Combine(outputFolder, resolvedFileName);
+        File.WriteAllText(fullPath, BuildCsvContent(rows, includeComment), new UTF8Encoding(true));
 
         _logService.LogSuccess(contextLabel + ": Generated file " + fullPath + " with row count " + rows.Count.ToString(CultureInfo.InvariantCulture));
-        SetCsvStatus(fileName, rows.Count);
+        SetCsvStatus(resolvedFileName, rows.Count);
         WriteStatus(contextLabel + " completed");
         RefreshLogViewer();
     }
 
-    private static string BuildCsvContent(IEnumerable<CsvRow> rows, bool includeComment)
+    private static string BuildCsvContent(IEnumerable<CsvMeasurementRow> rows, bool includeComment)
     {
         var builder = new StringBuilder();
-        builder.Append("RecordId,MachineCode,Status,CreatedAt");
+        builder.Append("Serial,WorkDate,MeasuredAt,MachineCode,OK/NG,Measure1(P1),Measure2(P2),Measure3(P3),Measure4(P4),Beta1(P5),Beta2(P6),Beta3(P7),Beta4(P8),Beta5(P9),Beta6(P10),BetaRange(P5~P10),BetaAverage(P5~P10)");
         if (includeComment)
         {
             builder.Append(",Comment");
@@ -1267,13 +1776,39 @@ public partial class Form1 : Form
 
         foreach (var row in rows)
         {
-            builder.Append(EscapeCsv(row.RecordId));
+            builder.Append(EscapeCsv(row.Serial));
+            builder.Append(',');
+            builder.Append(EscapeCsv(row.WorkDate));
+            builder.Append(',');
+            builder.Append(EscapeCsv(row.MeasuredAt));
             builder.Append(',');
             builder.Append(EscapeCsv(row.MachineCode));
             builder.Append(',');
-            builder.Append(EscapeCsv(row.Status));
+            builder.Append(EscapeCsv(row.Result));
             builder.Append(',');
-            builder.Append(EscapeCsv(row.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)));
+            builder.Append(FormatCsvNumber(row.P1));
+            builder.Append(',');
+            builder.Append(FormatCsvNumber(row.P2));
+            builder.Append(',');
+            builder.Append(FormatCsvNumber(row.P3));
+            builder.Append(',');
+            builder.Append(FormatCsvNumber(row.P4));
+            builder.Append(',');
+            builder.Append(FormatCsvNumber(row.Beta1));
+            builder.Append(',');
+            builder.Append(FormatCsvNumber(row.Beta2));
+            builder.Append(',');
+            builder.Append(FormatCsvNumber(row.Beta3));
+            builder.Append(',');
+            builder.Append(FormatCsvNumber(row.Beta4));
+            builder.Append(',');
+            builder.Append(FormatCsvNumber(row.Beta5));
+            builder.Append(',');
+            builder.Append(FormatCsvNumber(row.Beta6));
+            builder.Append(',');
+            builder.Append(FormatCsvNumber(row.BetaRange));
+            builder.Append(',');
+            builder.Append(FormatCsvNumber(row.BetaAverage));
             if (includeComment)
             {
                 builder.Append(',');
@@ -1284,6 +1819,16 @@ public partial class Form1 : Form
         }
 
         return builder.ToString();
+    }
+
+    private static string FormatCsvNumber(decimal value)
+    {
+        return value.ToString("0.###", CultureInfo.InvariantCulture);
+    }
+
+    private static decimal RoundCsvValue(decimal value)
+    {
+        return decimal.Round(value, 3, MidpointRounding.AwayFromZero);
     }
 
     private static string EscapeCsv(string value)
@@ -1309,7 +1854,36 @@ public partial class Form1 : Form
 
     private DateTime GetCsvBaseTime()
     {
-        return _dtCsvBase?.Value ?? _settings.DatetimeBase;
+        return _csvAutomationExecutionContext?.RunStamp ?? _dtCsvBase?.Value ?? _settings.DatetimeBase;
+    }
+
+    private string ResolveCsvOutputFileName(string fileName)
+    {
+        if (_csvAutomationExecutionContext is null)
+        {
+            return fileName;
+        }
+
+        var fileExtension = Path.GetExtension(fileName);
+        var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(fileName);
+        var suffix =
+            _csvAutomationExecutionContext.RunStamp.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture) +
+            "_r" +
+            _csvAutomationExecutionContext.RunSequence.ToString("D3", CultureInfo.InvariantCulture);
+
+        return fileNameWithoutExtension + "_" + suffix + fileExtension;
+    }
+
+    private static string BuildDailySerialSeed(DateTime baseTime, int sequence)
+    {
+        return BuildDailySerialSeedNumber(baseTime, sequence).ToString(CultureInfo.InvariantCulture);
+    }
+
+    private static long BuildDailySerialSeedNumber(DateTime baseTime, int sequence)
+    {
+        return long.Parse(
+            baseTime.ToString("yyyyMMdd", CultureInfo.InvariantCulture) + sequence.ToString("D4", CultureInfo.InvariantCulture),
+            CultureInfo.InvariantCulture);
     }
 
     private string? EnsureCsvOutputFolder()
@@ -1386,7 +1960,7 @@ public partial class Form1 : Form
             .ToList();
     }
 
-    private static bool TryParseKeyStart(string keyStart, out string prefix, out int number)
+    private static bool TryParseKeyStart(string keyStart, out string prefix, out long number)
     {
         prefix = string.Empty;
         number = 0;
@@ -1405,9 +1979,8 @@ public partial class Form1 : Form
         var numericPart = keyStart[(index + 1)..];
         prefix = keyStart[..(index + 1)];
 
-        return !string.IsNullOrWhiteSpace(prefix) &&
-               !string.IsNullOrWhiteSpace(numericPart) &&
-               int.TryParse(numericPart, out number);
+        return !string.IsNullOrWhiteSpace(numericPart) &&
+               long.TryParse(numericPart, out number);
     }
 
     private Control CreateScenarioPlaceholderPage(string title, string description, IReadOnlyList<string> nextItems)
@@ -1679,7 +2252,7 @@ public partial class Form1 : Form
         };
 
         grid.ColumnCount = columns;
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190F));
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 240F));
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
 
         if (columns == 3)
@@ -1736,7 +2309,8 @@ public partial class Form1 : Form
             Minimum = minimum,
             Maximum = maximum,
             Value = Math.Max(minimum, Math.Min(maximum, value)),
-            Width = 180,
+            Anchor = AnchorStyles.Left | AnchorStyles.Right,
+            Width = 220,
             Margin = new Padding(0, 0, 12, 12),
             AccessibleName = label
         };
@@ -1752,7 +2326,7 @@ public partial class Form1 : Form
         {
             Text = text,
             AutoSize = true,
-            MaximumSize = new Size(190, 0),
+            MaximumSize = new Size(240, 0),
             ForeColor = Color.FromArgb(30, 41, 59),
             Margin = new Padding(0, 8, 14, 12)
         }, 0, row);
@@ -1767,31 +2341,73 @@ public partial class Form1 : Form
             BackColor = ShellBackground
         };
 
+        var canvas = new Panel
+        {
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            BackColor = Color.Transparent,
+            Location = new Point(0, 0),
+            Margin = new Padding(0),
+            Padding = new Padding(0)
+        };
+
         stack = new FlowLayoutPanel
         {
-            Dock = DockStyle.Top,
             FlowDirection = FlowDirection.TopDown,
             WrapContents = false,
             AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
             Margin = new Padding(0),
             Padding = new Padding(0),
+            Location = new Point(0, 0),
             BackColor = Color.Transparent
         };
 
-        page.Controls.Add(stack);
+        canvas.Controls.Add(stack);
+        page.Controls.Add(canvas);
         var stackRef = stack;
-        page.Resize += (_, _) => ResizeStackCards(page, stackRef);
+        var canvasRef = canvas;
+        page.Resize += (_, _) => ResizeStackCards(page, canvasRef, stackRef);
+        stack.ControlAdded += (_, _) => ResizeStackCards(page, canvasRef, stackRef);
+        stack.ControlRemoved += (_, _) => ResizeStackCards(page, canvasRef, stackRef);
         return page;
     }
 
     private static void ResizeStackCards(Panel page, FlowLayoutPanel stack)
     {
-        var targetWidth = Math.Max(340, page.ClientSize.Width - 10 - SystemInformation.VerticalScrollBarWidth);
+        if (page.Controls.Count == 0 || page.Controls[0] is not Panel canvas)
+        {
+            return;
+        }
+
+        ResizeStackCards(page, canvas, stack);
+    }
+
+    private static void ResizeStackCards(Panel page, Panel canvas, FlowLayoutPanel stack)
+    {
+        var targetWidth = Math.Max(340, page.ClientSize.Width - 8 - SystemInformation.VerticalScrollBarWidth);
+
+        canvas.SuspendLayout();
+        stack.SuspendLayout();
+
+        canvas.Width = targetWidth;
+        stack.Width = targetWidth;
+
         foreach (Control control in stack.Controls)
         {
             control.Width = targetWidth;
             control.MaximumSize = new Size(targetWidth, 0);
+            UpdateResponsiveCardMetrics(control, targetWidth);
         }
+
+        var preferredHeight = stack.PreferredSize.Height;
+        canvas.Height = preferredHeight;
+        canvas.Left = Math.Max(0, (page.ClientSize.Width - targetWidth) / 2);
+        canvas.Top = 0;
+        page.AutoScrollMinSize = new Size(0, preferredHeight + 8);
+
+        stack.ResumeLayout(true);
+        canvas.ResumeLayout(true);
     }
 
     private static Panel CreateCard(string title, string description, out TableLayoutPanel content)
@@ -1887,6 +2503,92 @@ public partial class Form1 : Form
         return panel;
     }
 
+    private static void ConfigureResponsiveCardGrid(Control host, TableLayoutPanel grid, int singleColumnThreshold, params Control[] cards)
+    {
+        void ApplyLayout()
+        {
+            var useSingleColumn = host.ClientSize.Width < singleColumnThreshold;
+            var useFourColumns = cards.Length == 4 && host.ClientSize.Width >= 1380;
+
+            grid.SuspendLayout();
+            grid.Controls.Clear();
+            grid.RowStyles.Clear();
+            grid.ColumnStyles.Clear();
+
+            if (useSingleColumn)
+            {
+                grid.ColumnCount = 1;
+                grid.RowCount = cards.Length;
+                grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+
+                for (var i = 0; i < cards.Length; i++)
+                {
+                    grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                    cards[i].Margin = new Padding(0, 0, 0, i == cards.Length - 1 ? 0 : 14);
+                    grid.Controls.Add(cards[i], 0, i);
+                }
+            }
+            else if (useFourColumns)
+            {
+                grid.ColumnCount = 4;
+                grid.RowCount = 1;
+
+                for (var column = 0; column < 4; column++)
+                {
+                    grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
+                }
+
+                grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+                for (var i = 0; i < cards.Length; i++)
+                {
+                    cards[i].Margin = new Padding(i == 0 ? 0 : 6, 0, i == cards.Length - 1 ? 0 : 6, 14);
+                    grid.Controls.Add(cards[i], i, 0);
+                }
+            }
+            else
+            {
+                grid.ColumnCount = 2;
+                grid.RowCount = (int)Math.Ceiling(cards.Length / 2D);
+                grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+                grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+
+                for (var row = 0; row < grid.RowCount; row++)
+                {
+                    grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                }
+
+                for (var i = 0; i < cards.Length; i++)
+                {
+                    var column = i % 2;
+                    var row = i / 2;
+                    cards[i].Margin = new Padding(column == 0 ? 0 : 6, 0, column == 0 ? 8 : 0, 14);
+                    grid.Controls.Add(cards[i], column, row);
+                }
+            }
+
+            grid.ResumeLayout(true);
+        }
+
+        host.Resize += (_, _) => ApplyLayout();
+        ApplyLayout();
+    }
+
+    private static void UpdateResponsiveCardMetrics(Control control, int containerWidth)
+    {
+        var contentWidth = Math.Max(220, containerWidth - 56);
+
+        if (control is Label label && label.MaximumSize.Width > 0)
+        {
+            label.MaximumSize = new Size(contentWidth, 0);
+        }
+
+        foreach (Control child in control.Controls)
+        {
+            UpdateResponsiveCardMetrics(child, contentWidth);
+        }
+    }
+
     private Button CreateHeroActionButton(string text, EventHandler onClick)
     {
         var button = new Button
@@ -1942,6 +2644,7 @@ public partial class Form1 : Form
     {
         ApplyHeroResponsiveLayout();
         ApplySidebarResponsiveLayout();
+        ApplyContentHostResponsiveLayout();
         ResizeNavigationButtons();
     }
 
@@ -2018,18 +2721,40 @@ public partial class Form1 : Form
             return;
         }
 
-        var desiredWidth = availableWidth >= 1600 ? 340 :
-            availableWidth >= 1280 ? 320 :
-            availableWidth >= 1100 ? 300 :
-            280;
+        var desiredWidth = availableWidth >= 1800 ? 420 :
+            availableWidth >= 1500 ? 400 :
+            availableWidth >= 1280 ? 380 :
+            availableWidth >= 1120 ? 360 :
+            330;
 
-        var maxAllowed = Math.Max(_mainSplitContainer.Panel1MinSize, availableWidth - 460);
+        var maxAllowed = Math.Max(_mainSplitContainer.Panel1MinSize, availableWidth - 420);
         var finalWidth = Math.Clamp(desiredWidth, _mainSplitContainer.Panel1MinSize, maxAllowed);
 
         if (finalWidth > 0 && _mainSplitContainer.SplitterDistance != finalWidth)
         {
             _mainSplitContainer.SplitterDistance = finalWidth;
         }
+    }
+
+    private void ApplyContentHostResponsiveLayout()
+    {
+        if (_contentHost is null || _mainSplitContainer is null)
+        {
+            return;
+        }
+
+        var availableWidth = _mainSplitContainer.Panel2.ClientSize.Width;
+        if (availableWidth <= 0)
+        {
+            return;
+        }
+
+        var horizontalPadding = availableWidth >= 1400 ? 24 :
+            availableWidth >= 1100 ? 18 :
+            12;
+
+        var verticalPadding = availableWidth >= 1100 ? 20 : 12;
+        _contentHost.Padding = new Padding(horizontalPadding, verticalPadding, horizontalPadding, verticalPadding);
     }
 
     private void ResizeNavigationButtons()
@@ -2039,13 +2764,15 @@ public partial class Form1 : Form
             return;
         }
 
-        var availableWidth = Math.Max(240, _navigationStack.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - 6);
-        var buttonHeight = availableWidth >= 250 ? 68 : 76;
+        var availableWidth = Math.Max(300, _navigationStack.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - 4);
+        var buttonHeight = availableWidth >= 340 ? 88 : 96;
 
-        foreach (var button in _navButtons.Values)
+        foreach (var item in _navButtons.Values)
         {
-            button.Width = availableWidth;
-            button.Height = buttonHeight;
+            item.Container.Width = availableWidth;
+            item.Container.Height = buttonHeight;
+            item.TitleLabel.MaximumSize = new Size(Math.Max(220, availableWidth - 32), 0);
+            item.SubtitleLabel.MaximumSize = new Size(Math.Max(220, availableWidth - 32), 0);
         }
     }
 
@@ -2094,8 +2821,11 @@ public partial class Form1 : Form
         foreach (var entry in _navButtons)
         {
             var selected = string.Equals(entry.Key, pageKey, StringComparison.Ordinal);
-            entry.Value.BackColor = selected ? NavButtonSelected : NavButtonBackground;
-            entry.Value.ForeColor = Color.White;
+            entry.Value.Container.BackColor = selected ? NavButtonSelected : NavButtonBackground;
+            entry.Value.TitleLabel.ForeColor = Color.White;
+            entry.Value.SubtitleLabel.ForeColor = selected
+                ? Color.FromArgb(224, 242, 254)
+                : Color.FromArgb(191, 219, 254);
         }
 
         if (_pages.TryGetValue(pageKey, out var pageControl))
@@ -2884,5 +3614,48 @@ public partial class Form1 : Form
         return path;
     }
 
-    private sealed record CsvRow(string RecordId, string MachineCode, string Status, DateTime CreatedAt, string Comment);
+    private sealed record NavigationItem(Panel Container, Label TitleLabel, Label SubtitleLabel);
+
+    private enum CsvScheduleMode
+    {
+        OneTime,
+        Daily,
+        EveryNMinutes
+    }
+
+    private sealed record CsvAutomationExecutionContext(DateTime RunStamp, int RunSequence);
+
+    private sealed record CsvMeasurementProfile(
+        decimal P1,
+        decimal P2,
+        decimal P3,
+        decimal P4,
+        decimal Beta1,
+        decimal Beta2,
+        decimal Beta3,
+        decimal Beta4,
+        decimal Beta5,
+        decimal Beta6,
+        decimal BetaRange,
+        decimal BetaAverage);
+
+    private sealed record CsvMeasurementRow(
+        string Serial,
+        string WorkDate,
+        string MeasuredAt,
+        string MachineCode,
+        string Result,
+        decimal P1,
+        decimal P2,
+        decimal P3,
+        decimal P4,
+        decimal Beta1,
+        decimal Beta2,
+        decimal Beta3,
+        decimal Beta4,
+        decimal Beta5,
+        decimal Beta6,
+        decimal BetaRange,
+        decimal BetaAverage,
+        string Comment);
 }
