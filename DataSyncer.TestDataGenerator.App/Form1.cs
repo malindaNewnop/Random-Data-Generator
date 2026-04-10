@@ -19,6 +19,9 @@ public partial class Form1 : Form
     private const string FileSyncerPageKey = "filesyncer";
     private const string SettingsPageKey = "settings";
     private const string LogViewerPageKey = "logviewer";
+    private const string CsvHappyPathFolderName = "Happy Path";
+    private const string CsvOptionalMissingFolderName = "Optional Column Missing";
+    private const string CsvDuplicatePreventionFolderName = "Duplicate Prevention";
 
     private static readonly Color ShellBackground = Color.FromArgb(243, 246, 249);
     private static readonly Color CardBackground = Color.White;
@@ -48,8 +51,10 @@ public partial class Form1 : Form
     private TableLayoutPanel? _heroLayout;
     private Control? _heroContent;
     private FlowLayoutPanel? _heroActions;
+    private Label? _heroSubtitleLabel;
     private SplitContainer? _mainSplitContainer;
     private FlowLayoutPanel? _navigationStack;
+    private Label? _navigationFooterLabel;
     private Panel? _contentHost;
     private ToolStripStatusLabel? _statusLabel;
     private ToolStripStatusLabel? _currentPageLabel;
@@ -89,6 +94,13 @@ public partial class Form1 : Form
     private NumericUpDown? _numCsvScheduleIntervalMinutes;
     private ComboBox? _cmbCsvScheduleTarget;
     private Label? _lblCsvScheduleStatus;
+    private TextBox? _txtCsvClientMachineFolders;
+    private NumericUpDown? _numCsvClientRowsPerMachine;
+    private TextBox? _txtCsvClientStatuses;
+    private CheckBox? _chkCsvClientIncludeComment;
+    private Label? _lblCsvClientPatternPreview;
+    private TextBox? _txtCsvLegacyScenarioMachineFolders;
+    private Label? _lblCsvLegacyScenarioPreview;
     private TextBox? _txtCsvS1OutputFilename;
     private NumericUpDown? _numCsvS1RowCount;
     private TextBox? _txtCsvS1KeyStart;
@@ -230,14 +242,15 @@ public partial class Form1 : Form
             Font = new Font("Segoe UI Semibold", 22F, FontStyle.Bold)
         });
 
-        left.Controls.Add(new Label
+        _heroSubtitleLabel = new Label
         {
             Text = "A QA-friendly desktop workspace for configuring data generation, validating environments, and preparing each DataSyncer scenario with less manual setup.",
             AutoSize = true,
             MaximumSize = new Size(820, 0),
             ForeColor = Color.FromArgb(230, 241, 245),
             Margin = new Padding(0, 8, 0, 0)
-        });
+        };
+        left.Controls.Add(_heroSubtitleLabel);
 
         _heroMetaLabel = new Label
         {
@@ -276,12 +289,12 @@ public partial class Form1 : Form
             Dock = DockStyle.Fill,
             FixedPanel = FixedPanel.Panel1,
             IsSplitterFixed = false,
-            SplitterDistance = 380,
+            SplitterDistance = 340,
             SplitterWidth = 1,
             BackColor = CardBorder
         };
 
-        _mainSplitContainer.Panel1MinSize = 330;
+        _mainSplitContainer.Panel1MinSize = 280;
         _mainSplitContainer.Panel1.BackColor = NavBackground;
         _mainSplitContainer.Panel2.BackColor = ShellBackground;
         _mainSplitContainer.Resize += (_, _) => ApplyResponsiveShellLayout();
@@ -381,13 +394,15 @@ public partial class Form1 : Form
 
         layout.Controls.Add(_navigationStack, 0, 1);
 
-        layout.Controls.Add(new Label
+        _navigationFooterLabel = new Label
         {
             Text = "Responsive shell with scrolling support for smaller displays",
             AutoSize = true,
+            MaximumSize = new Size(320, 0),
             ForeColor = Color.FromArgb(148, 163, 184),
             Margin = new Padding(4, 10, 0, 0)
-        }, 0, 2);
+        };
+        layout.Controls.Add(_navigationFooterLabel, 0, 2);
 
         panel.Controls.Add(layout);
         return panel;
@@ -398,7 +413,7 @@ public partial class Form1 : Form
         var card = new Panel
         {
             Width = 310,
-            Height = 86,
+            Height = 96,
             Margin = new Padding(0, 0, 0, 10),
             Cursor = Cursors.Hand,
             BackColor = NavButtonBackground,
@@ -624,6 +639,8 @@ public partial class Form1 : Form
 
         stack.Controls.Add(CreateCsvOverviewCard());
         stack.Controls.Add(CreateCsvSharedControlsCard());
+        stack.Controls.Add(CreateCsvScenarioJobFoldersCard());
+        stack.Controls.Add(CreateCsvClientDailyCard());
         stack.Controls.Add(CreateCsvAutomationCard());
         stack.Controls.Add(CreateCsvScenario1Card());
         stack.Controls.Add(CreateCsvScenario2Card());
@@ -636,7 +653,7 @@ public partial class Form1 : Form
 
     private Control CreateCsvOverviewCard()
     {
-        var card = CreateCard("CSVtoDB Generator", "Generate deterministic CSV files for all four CSVtoDB scenarios from a single QA-friendly workspace.", out var content);
+        var card = CreateCard("CSVtoDB Generator", "Generate client-style daily machine files and keep the legacy CSV QA scenarios available from the same workspace.", out var content);
 
         var badges = new FlowLayoutPanel
         {
@@ -645,13 +662,14 @@ public partial class Form1 : Form
             Margin = new Padding(0, 8, 0, 0)
         };
         badges.Controls.Add(CreateBadgeLabel("READY TO GENERATE", SuccessSoft, SuccessColor));
-        badges.Controls.Add(CreateBadgeLabel("4 SCENARIOS", AccentSoft, AccentColor));
+        badges.Controls.Add(CreateBadgeLabel("CLIENT DAILY FEED", AccentSoft, AccentColor));
+        badges.Controls.Add(CreateBadgeLabel("4 LEGACY SCENARIOS", WarningSoft, WarningColor));
         badges.Controls.Add(CreateBadgeLabel("DETERMINISTIC OUTPUT", WarningSoft, WarningColor));
         content.Controls.Add(badges);
 
         content.Controls.Add(new Label
         {
-            Text = "Use the shared controls below to choose the output folder and base timestamp, then generate a single scenario or all CSV scenarios in sequence.",
+            Text = "Use the shared controls below to choose the root folder and base timestamp, then generate either the client-style daily machine feed or one of the legacy CSV scenarios.",
             AutoSize = true,
             MaximumSize = new Size(1040, 0),
             ForeColor = MutedText,
@@ -682,6 +700,8 @@ public partial class Form1 : Form
             AccessibleName = "CSV output folder path"
         };
         _toolTip.SetToolTip(_txtCsvOutputFolder, "Folder where the CSVtoDB files will be created.");
+        _txtCsvOutputFolder.TextChanged += (_, _) => UpdateCsvClientPatternPreview();
+        _txtCsvOutputFolder.TextChanged += (_, _) => UpdateCsvLegacyScenarioPreview();
         grid.Controls.Add(_txtCsvOutputFolder, 1, 0);
 
         var outputActions = CreateInlineActionPanel();
@@ -701,6 +721,8 @@ public partial class Form1 : Form
             AccessibleName = "CSV base datetime"
         };
         _toolTip.SetToolTip(_dtCsvBase, "Base timestamp for generated CSV rows.");
+        _dtCsvBase.ValueChanged += (_, _) => UpdateCsvClientPatternPreview();
+        _dtCsvBase.ValueChanged += (_, _) => UpdateCsvLegacyScenarioPreview();
         grid.Controls.Add(_dtCsvBase, 1, 1);
         grid.Controls.Add(new Panel { Width = 1, Height = 1 }, 2, 1);
 
@@ -715,6 +737,7 @@ public partial class Form1 : Form
         };
         _cmbCsvScenario.Items.AddRange(new object[]
         {
+            "Client Pattern - Daily Machine Feed",
             "Scenario 1 - Happy Path CSV Import",
             "Scenario 2 - Optional Column Missing",
             "Scenario 3 - Duplicate Prevention",
@@ -752,9 +775,133 @@ public partial class Form1 : Form
         return card;
     }
 
+    private Control CreateCsvScenarioJobFoldersCard()
+    {
+        var card = CreateCard("Phase 1 Scenario Job Folders", "Create one daily YYYYMMDD.csv file under Scenario\\Machine\\yyyy\\MM\\dd so you can point separate DataSyncer jobs at each scenario root and keep them running in parallel.", out var content);
+
+        var grid = CreateCsvFormGrid();
+
+        AddLabelCell(grid, "Machine folders", 0);
+        _txtCsvLegacyScenarioMachineFolders = CreateCsvTextBox("UPR_HSG, LWR_HSG", "Comma-separated machine folder names used for Scenario 1-3 timer output.");
+        _txtCsvLegacyScenarioMachineFolders.AccessibleName = "CSV legacy scenario machine folders";
+        _txtCsvLegacyScenarioMachineFolders.TextChanged += (_, _) => UpdateCsvLegacyScenarioPreview();
+        content.Controls.Add(grid);
+        grid.Controls.Add(_txtCsvLegacyScenarioMachineFolders, 1, 0);
+
+        _lblCsvLegacyScenarioPreview = new Label
+        {
+            AutoSize = true,
+            MaximumSize = new Size(1020, 0),
+            ForeColor = MutedText,
+            Margin = new Padding(0, 8, 0, 0)
+        };
+        content.Controls.Add(_lblCsvLegacyScenarioPreview);
+
+        var actions = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            WrapContents = true,
+            Margin = new Padding(0, 12, 0, 0)
+        };
+        actions.Controls.Add(CreateActionButton("Generate Scenario Job Folders", (_, _) => RunCsvScenarioJobFoldersNow(), true));
+        actions.Controls.Add(CreateActionButton("Open Output Root", (_, _) => OpenCsvOutputFolder()));
+        content.Controls.Add(actions);
+
+        content.Controls.Add(CreateInfoNote(
+            "Phase 1 job roots",
+            "This creates folder trees like Happy Path\\UPR_HSG\\2026\\04\\10\\20260410.csv, Optional Column Missing\\LWR_HSG\\2026\\04\\10\\20260410.csv, and Duplicate Prevention\\UPR_HSG\\2026\\04\\10\\20260410.csv. Configure one DataSyncer job per scenario root and let each job recurse into its machine folders.",
+            AccentSoft,
+            AccentColor));
+
+        content.Controls.Add(CreateInfoNote(
+            "Machine-code note",
+            "For this phase-1 folder routing, the machine folder names are also used as the MachineCode values inside the generated CSV rows. Set them exactly how you want DataSyncer to see them, such as UPR_HSG and LWR_HSG.",
+            SuccessSoft,
+            SuccessColor));
+
+        content.Controls.Add(CreateInfoNote(
+            "Timer target",
+            "Set the CSV timer target to Generate Scenario Job Folders (1-3) to keep appending into the same daily file automatically. At midnight, the generator rolls over to a new yyyy\\MM\\dd\\YYYYMMDD.csv file for the new date.",
+            WarningSoft,
+            WarningColor));
+
+        UpdateCsvLegacyScenarioPreview();
+        return card;
+    }
+
+    private Control CreateCsvClientDailyCard()
+    {
+        var card = CreateCard("Client Pattern - Daily Machine Feed", "Create or append one daily .CSV file per machine under Machine\\yyyy\\MM\\dd so the generator matches the client folder pattern.", out var content);
+
+        var grid = CreateCsvFormGrid();
+
+        AddLabelCell(grid, "Machine folders", 0);
+        _txtCsvClientMachineFolders = CreateCsvTextBox("UPR_HSG, LWR_HSG", "Comma-separated machine folder names. Each machine gets its own yyyy\\MM\\dd\\yyyyMMdd.CSV path.");
+        _txtCsvClientMachineFolders.AccessibleName = "CSV client machine folders";
+        _txtCsvClientMachineFolders.TextChanged += (_, _) => UpdateCsvClientPatternPreview();
+        grid.Controls.Add(_txtCsvClientMachineFolders, 1, 0);
+
+        AddLabelCell(grid, "Rows per machine/run", 1);
+        _numCsvClientRowsPerMachine = CreateCsvNumeric(1, 500, 1, "How many new rows to append into each machine day file on every generation run.");
+        _numCsvClientRowsPerMachine.AccessibleName = "CSV client rows per machine";
+        grid.Controls.Add(_numCsvClientRowsPerMachine, 1, 1);
+
+        AddLabelCell(grid, "Result values", 2);
+        _txtCsvClientStatuses = CreateCsvTextBox("OK", "Comma-separated OK/NG values used when appending client-pattern rows.");
+        _txtCsvClientStatuses.AccessibleName = "CSV client result values";
+        grid.Controls.Add(_txtCsvClientStatuses, 1, 2);
+
+        AddLabelCell(grid, "Include Comment column", 3);
+        _chkCsvClientIncludeComment = new CheckBox
+        {
+            Checked = false,
+            AutoSize = true,
+            Margin = new Padding(0, 4, 0, 12),
+            AccessibleName = "CSV client include comment column"
+        };
+        _toolTip.SetToolTip(_chkCsvClientIncludeComment, "Include the optional Comment column in the client-style daily files.");
+        grid.Controls.Add(_chkCsvClientIncludeComment, 1, 3);
+
+        content.Controls.Add(grid);
+
+        _lblCsvClientPatternPreview = new Label
+        {
+            AutoSize = true,
+            MaximumSize = new Size(1020, 0),
+            ForeColor = MutedText,
+            Margin = new Padding(0, 8, 0, 0)
+        };
+        content.Controls.Add(_lblCsvClientPatternPreview);
+
+        var actions = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            WrapContents = true,
+            Margin = new Padding(0, 12, 0, 0)
+        };
+        actions.Controls.Add(CreateActionButton("Generate Daily Machine Files", (_, _) => GenerateCsvClientDailyFeed(), true));
+        actions.Controls.Add(CreateActionButton("Open Output Root", (_, _) => OpenCsvOutputFolder()));
+        content.Controls.Add(actions);
+
+        content.Controls.Add(CreateInfoNote(
+            "Pattern behavior",
+            "For each machine, the app creates a folder path like UPR_HSG\\2025\\06\\07\\20250607.CSV. If the file already exists for that day, new rows are appended to the same file instead of creating a new one.",
+            AccentSoft,
+            AccentColor));
+
+        content.Controls.Add(CreateInfoNote(
+            "Timer behavior",
+            "Set Selected scenario to Client Pattern - Daily Machine Feed and arm Every N minutes to keep appending new rows to the same day file every minute. When the target date changes, the generator automatically rolls over to a new yyyy\\MM\\dd\\yyyyMMdd.CSV file.",
+            SuccessSoft,
+            SuccessColor));
+
+        UpdateCsvClientPatternPreview();
+        return card;
+    }
+
     private Control CreateCsvAutomationCard()
     {
-        var card = CreateCard("CSV Automation Timer", "Keep this application open while DataSyncer is running and arm one-time, daily, or interval-based CSV generation. For example, set Every N minutes to 1 to create fresh data every minute automatically.", out var content);
+        var card = CreateCard("CSV Automation Timer", "Keep this application open while DataSyncer is running and arm one-time, daily, or interval-based CSV generation. Use Generate Scenario Job Folders (1-3) for phase-1 parallel CSVtoDB jobs, or use the client daily feed to append into the same day file automatically.", out var content);
 
         var grid = CreateCsvFormGrid();
 
@@ -807,10 +954,11 @@ public partial class Form1 : Form
         _cmbCsvScheduleTarget.Items.AddRange(new object[]
         {
             "Generate Selected Scenario",
+            "Generate Scenario Job Folders (1-3)",
             "Generate All CSV Scenarios"
         });
         _cmbCsvScheduleTarget.SelectedIndex = 0;
-        _toolTip.SetToolTip(_cmbCsvScheduleTarget, "Choose whether the timer runs the selected scenario or all CSV scenarios.");
+        _toolTip.SetToolTip(_cmbCsvScheduleTarget, "Choose whether the timer runs the selected scenario, the phase-1 scenario job folders, or all CSV scenarios.");
         grid.Controls.Add(_cmbCsvScheduleTarget, 1, 3);
 
         content.Controls.Add(grid);
@@ -838,7 +986,7 @@ public partial class Form1 : Form
 
         content.Controls.Add(CreateInfoNote(
             "Parallel run note",
-            "This timer works while the generator app is open, so you can leave it running next to DataSyncer and let it create fresh CSV files automatically at a scheduled time or recurring interval.",
+            "This timer works while the generator app is open, so you can leave it running next to DataSyncer and let it create fresh CSV files automatically at a scheduled time or recurring interval. For phase 1, choose Generate Scenario Job Folders (1-3) so Happy Path, Optional Column Missing, and Duplicate Prevention each get their own scenario root.",
             AccentSoft,
             AccentColor));
 
@@ -1073,6 +1221,8 @@ public partial class Form1 : Form
         {
             BackColor = background,
             Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
             Padding = new Padding(14),
             Margin = new Padding(0, 8, 0, 0)
         };
@@ -1126,15 +1276,18 @@ public partial class Form1 : Form
         switch (_cmbCsvScenario.SelectedIndex)
         {
             case 0:
-                GenerateCsvScenario1();
+                GenerateCsvClientDailyFeed();
                 break;
             case 1:
-                GenerateCsvScenario2();
+                GenerateCsvScenario1();
                 break;
             case 2:
-                GenerateCsvScenario3();
+                GenerateCsvScenario2();
                 break;
             case 3:
+                GenerateCsvScenario3();
+                break;
+            case 4:
                 GenerateCsvScenario4();
                 break;
             default:
@@ -1145,10 +1298,369 @@ public partial class Form1 : Form
 
     private void GenerateAllCsvScenarios()
     {
+        GenerateCsvClientDailyFeed();
         GenerateCsvScenario1();
         GenerateCsvScenario2();
         GenerateCsvScenario3();
         GenerateCsvScenario4();
+    }
+
+    private void UpdateCsvClientPatternPreview()
+    {
+        if (_lblCsvClientPatternPreview is null)
+        {
+            return;
+        }
+
+        var outputRoot = _txtCsvOutputFolder?.Text.Trim() ?? string.Empty;
+        var machineFolders = ParseCommaSeparatedValues(_txtCsvClientMachineFolders?.Text ?? string.Empty)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (string.IsNullOrWhiteSpace(outputRoot))
+        {
+            _lblCsvClientPatternPreview.Text = "Preview: choose the CSV root folder first.";
+            _lblCsvClientPatternPreview.ForeColor = WarningColor;
+            return;
+        }
+
+        if (machineFolders.Count == 0)
+        {
+            _lblCsvClientPatternPreview.Text = "Preview: add at least one machine folder such as UPR_HSG or LWR_HSG.";
+            _lblCsvClientPatternPreview.ForeColor = WarningColor;
+            return;
+        }
+
+        var targetDate = (_dtCsvBase?.Value ?? _settings.DatetimeBase).Date;
+        var previewLines = machineFolders
+            .Take(3)
+            .Select(machine => Path.Combine(outputRoot, BuildCsvClientRelativePath(machine, targetDate)))
+            .ToList();
+
+        if (machineFolders.Count > previewLines.Count)
+        {
+            previewLines.Add("... plus " + (machineFolders.Count - previewLines.Count).ToString(CultureInfo.InvariantCulture) + " more machine folder(s)");
+        }
+
+        _lblCsvClientPatternPreview.Text =
+            "Daily file preview for " + targetDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + ":" +
+            Environment.NewLine +
+            string.Join(Environment.NewLine, previewLines);
+        _lblCsvClientPatternPreview.ForeColor = MutedText;
+    }
+
+    private void UpdateCsvLegacyScenarioPreview()
+    {
+        if (_lblCsvLegacyScenarioPreview is null)
+        {
+            return;
+        }
+
+        var outputRoot = _txtCsvOutputFolder?.Text.Trim() ?? string.Empty;
+        var machineFolders = GetCsvLegacyScenarioMachineFolders();
+
+        if (string.IsNullOrWhiteSpace(outputRoot))
+        {
+            _lblCsvLegacyScenarioPreview.Text = "Preview: choose the CSV root folder first.";
+            _lblCsvLegacyScenarioPreview.ForeColor = WarningColor;
+            return;
+        }
+
+        if (machineFolders.Count == 0)
+        {
+            _lblCsvLegacyScenarioPreview.Text = "Preview: add at least one machine folder such as UPR_HSG or LWR_HSG.";
+            _lblCsvLegacyScenarioPreview.ForeColor = WarningColor;
+            return;
+        }
+
+        var targetDate = ResolveCsvClientRunBaseTime().Date;
+        var previewLines = new List<string>();
+        foreach (var scenarioFolder in GetCsvLegacyScenarioFolderNames())
+        {
+            foreach (var machineFolder in machineFolders.Take(2))
+            {
+                previewLines.Add(Path.Combine(outputRoot, BuildCsvLegacyScenarioDailyRelativePath(scenarioFolder, machineFolder, targetDate)));
+            }
+        }
+
+        _lblCsvLegacyScenarioPreview.Text =
+            "Phase 1 scenario tree preview for " + targetDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + ":" +
+            Environment.NewLine +
+            string.Join(Environment.NewLine, previewLines);
+        _lblCsvLegacyScenarioPreview.ForeColor = MutedText;
+    }
+
+    private void RunCsvScenarioJobFoldersNow()
+    {
+        if (_csvAutomationExecutionContext is not null)
+        {
+            GenerateCsvScenarioJobFolders();
+            return;
+        }
+
+        _csvAutomationExecutionContext = CreateCsvAutomationExecutionContext();
+        try
+        {
+            GenerateCsvScenarioJobFolders();
+        }
+        finally
+        {
+            _csvAutomationExecutionContext = null;
+        }
+    }
+
+    private void GenerateCsvScenarioJobFolders()
+    {
+        if (EnsureCsvOutputFolder() is null)
+        {
+            return;
+        }
+
+        if (_numCsvS1RowCount is null ||
+            _numCsvS2RowCount is null ||
+            _numCsvS3RowCount is null ||
+            _txtCsvS1Statuses is null ||
+            _chkCsvS1IncludeComment is null ||
+            _chkCsvS2OmitComment is null ||
+            _chkCsvS3GenerateVariant is null ||
+            _txtCsvS1KeyStart is null ||
+            _txtCsvS2KeyStart is null ||
+            _txtCsvS3KeyStart is null)
+        {
+            return;
+        }
+
+        var machineFolders = GetCsvLegacyScenarioMachineFolders();
+        if (machineFolders.Count == 0)
+        {
+            MessageBox.Show("Add at least one machine folder for the phase 1 scenario job roots.", "CSVtoDB", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        if (machineFolders.Any(machine => !IsValidCsvMachineFolderName(machine)))
+        {
+            MessageBox.Show("Machine folder names cannot contain path separators or invalid file-name characters.", "CSVtoDB", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        var scenario1Rows = Decimal.ToInt32(_numCsvS1RowCount.Value);
+        var scenario2Rows = Decimal.ToInt32(_numCsvS2RowCount.Value);
+        var scenario3Rows = Decimal.ToInt32(_numCsvS3RowCount.Value);
+
+        if (!ValidateCsvScenarioJobRowCount(scenario1Rows, machineFolders.Count, "Scenario 1") ||
+            !ValidateCsvScenarioJobRowCount(scenario2Rows, machineFolders.Count, "Scenario 2") ||
+            !ValidateCsvScenarioJobRowCount(scenario3Rows, machineFolders.Count, "Scenario 3"))
+        {
+            return;
+        }
+
+        if (!TryParseKeyStart(_txtCsvS1KeyStart.Text.Trim(), out var scenario1Prefix, out var scenario1StartNumber) ||
+            !TryParseKeyStart(_txtCsvS2KeyStart.Text.Trim(), out var scenario2Prefix, out var scenario2StartNumber) ||
+            !TryParseKeyStart(_txtCsvS3KeyStart.Text.Trim(), out var scenario3Prefix, out var scenario3StartNumber))
+        {
+            MessageBox.Show("Each phase 1 scenario key start must end in digits, for example 202604060001.", "CSVtoDB", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        var statuses = ParseCommaSeparatedValues(_txtCsvS1Statuses.Text);
+        if (statuses.Count == 0)
+        {
+            MessageBox.Show("Scenario 1 status values must contain at least one value.", "CSVtoDB", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        var runBaseTime = ResolveCsvClientRunBaseTime();
+        var summaries = new List<string>();
+
+        var scenario1RowsByMachine = BuildCsvScenarioDailyRowsByMachine(
+            CsvHappyPathFolderName,
+            scenario1Prefix,
+            scenario1StartNumber,
+            scenario1Rows,
+            machineFolders,
+            statuses,
+            _chkCsvS1IncludeComment.Checked,
+            runBaseTime,
+            generateFreshRowsPerRun: true);
+        WriteCsvToScenarioFolders(
+            CsvHappyPathFolderName,
+            scenario1RowsByMachine,
+            _chkCsvS1IncludeComment.Checked,
+            "CSVtoDB Scenario Job - Happy Path",
+            runBaseTime.Date,
+            summaries);
+
+        var scenario2RowsByMachine = BuildCsvScenarioDailyRowsByMachine(
+            CsvOptionalMissingFolderName,
+            scenario2Prefix,
+            scenario2StartNumber,
+            scenario2Rows,
+            machineFolders,
+            new List<string> { "OK" },
+            includeComment: !_chkCsvS2OmitComment.Checked,
+            runBaseTime,
+            generateFreshRowsPerRun: true);
+        WriteCsvToScenarioFolders(
+            CsvOptionalMissingFolderName,
+            scenario2RowsByMachine,
+            includeComment: !_chkCsvS2OmitComment.Checked,
+            "CSVtoDB Scenario Job - Optional Column Missing",
+            runBaseTime.Date,
+            summaries);
+
+        var duplicateBaseTime = runBaseTime.Date.Add((_dtCsvBase?.Value ?? _settings.DatetimeBase).TimeOfDay);
+        var scenario3SeedRowsByMachine = BuildCsvScenarioDailyRowsByMachine(
+            CsvDuplicatePreventionFolderName,
+            scenario3Prefix,
+            scenario3StartNumber,
+            scenario3Rows,
+            machineFolders,
+            new List<string> { "OK" },
+            includeComment: true,
+            duplicateBaseTime,
+            generateFreshRowsPerRun: false);
+        WriteCsvToScenarioFolders(
+            CsvDuplicatePreventionFolderName,
+            scenario3SeedRowsByMachine,
+            includeComment: true,
+            "CSVtoDB Scenario Job - Duplicate Prevention (seed)",
+            runBaseTime.Date,
+            summaries);
+
+        if (_chkCsvS3GenerateVariant.Checked)
+        {
+            var nextVariantNumber = scenario3StartNumber + scenario3Rows;
+            var variantRowsByMachine = new Dictionary<string, List<CsvMeasurementRow>>(StringComparer.OrdinalIgnoreCase);
+            var rowIndexOffset = scenario3Rows;
+
+            foreach (var machineFolder in machineFolders)
+            {
+                if (!scenario3SeedRowsByMachine.TryGetValue(machineFolder, out var seedRowsForMachine))
+                {
+                    continue;
+                }
+
+                var duplicateCount = Math.Min(8, seedRowsForMachine.Count);
+                var variantRows = new List<CsvMeasurementRow>(duplicateCount + 2);
+                for (var i = 0; i < duplicateCount; i++)
+                {
+                    variantRows.Add(seedRowsForMachine[i]);
+                }
+
+                for (var i = 0; i < 2; i++)
+                {
+                    variantRows.Add(BuildCsvMeasurementRow(
+                        scenario3Prefix,
+                        nextVariantNumber++,
+                        machineFolder,
+                        "OK",
+                        duplicateBaseTime.AddMinutes(rowIndexOffset + i),
+                        includeComment: true,
+                        rowIndexOffset + i,
+                        useAutomationSuffix: false));
+                }
+
+                rowIndexOffset += duplicateCount + 2;
+                variantRowsByMachine[machineFolder] = variantRows;
+            }
+
+            WriteCsvToScenarioFolders(
+                CsvDuplicatePreventionFolderName,
+                variantRowsByMachine,
+                includeComment: true,
+                "CSVtoDB Scenario Job - Duplicate Prevention (variant)",
+                runBaseTime.Date,
+                summaries);
+        }
+
+        var summaryText = string.Join(" | ", summaries);
+        if (_lblCsvStatus is not null)
+        {
+            _lblCsvStatus.Text = "Last generated: phase 1 job folders | " + summaryText;
+            _lblCsvStatus.ForeColor = SuccessColor;
+        }
+
+        RecordRunSummary("CSVtoDB", "Phase 1 job folders | " + summaryText, "Success");
+        WriteStatus("CSV phase 1 scenario job folders updated");
+        RefreshLogViewer();
+    }
+
+    private void GenerateCsvClientDailyFeed()
+    {
+        if (_txtCsvClientMachineFolders is null ||
+            _numCsvClientRowsPerMachine is null ||
+            _txtCsvClientStatuses is null ||
+            _chkCsvClientIncludeComment is null)
+        {
+            return;
+        }
+
+        var outputRoot = EnsureCsvOutputFolder();
+        if (outputRoot is null)
+        {
+            return;
+        }
+
+        var machineFolders = ParseCommaSeparatedValues(_txtCsvClientMachineFolders.Text)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (machineFolders.Count == 0)
+        {
+            MessageBox.Show("Add at least one machine folder such as UPR_HSG or LWR_HSG.", "CSVtoDB", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        if (machineFolders.Any(machine => !IsValidCsvMachineFolderName(machine)))
+        {
+            MessageBox.Show("Machine folder names cannot contain path separators or invalid file-name characters.", "CSVtoDB", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        var statuses = ParseCommaSeparatedValues(_txtCsvClientStatuses.Text);
+        if (statuses.Count == 0)
+        {
+            MessageBox.Show("Add at least one result value such as OK or NG.", "CSVtoDB", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        var rowsPerMachine = Decimal.ToInt32(_numCsvClientRowsPerMachine.Value);
+        var includeComment = _chkCsvClientIncludeComment.Checked;
+        var runBaseTime = ResolveCsvClientRunBaseTime();
+
+        var summaries = new List<string>();
+        var totalRows = 0;
+
+        foreach (var machine in machineFolders)
+        {
+            var fullPath = BuildCsvClientDailyFilePath(outputRoot, machine, runBaseTime.Date);
+            var existingRows = CountExistingCsvDataRows(fullPath);
+            var appendStartTime = ResolveCsvClientAppendStartTime(fullPath, runBaseTime);
+            var startNumber = BuildDailySerialSeedNumber(runBaseTime.Date, existingRows + 1);
+            var rows = BuildCsvRows(
+                string.Empty,
+                startNumber,
+                rowsPerMachine,
+                new List<string> { machine },
+                statuses,
+                includeComment,
+                appendStartTime,
+                useAutomationSuffix: false);
+
+            AppendCsvRowsToFile(fullPath, rows, includeComment, "CSVtoDB Client Daily Feed");
+            summaries.Add(machine + ": +" + rows.Count.ToString(CultureInfo.InvariantCulture) + " rows -> " + BuildCsvClientRelativePath(machine, runBaseTime.Date));
+            totalRows += rows.Count;
+        }
+
+        var summaryText = string.Join(" | ", summaries);
+        if (_lblCsvStatus is not null)
+        {
+            _lblCsvStatus.Text = "Last generated: client daily feed | " + summaryText;
+            _lblCsvStatus.ForeColor = SuccessColor;
+        }
+
+        RecordRunSummary("CSVtoDB", "Client daily feed | " + summaryText, "Success");
+        WriteStatus("CSV client daily feed updated");
+        RefreshLogViewer();
     }
 
     private void ArmCsvSchedule()
@@ -1251,13 +1763,17 @@ public partial class Form1 : Form
         try
         {
             var targetLabel = GetCsvScheduleTargetLabel();
-            if (_cmbCsvScheduleTarget?.SelectedIndex == 1)
+            switch (GetSelectedCsvScheduleTarget())
             {
-                GenerateAllCsvScenarios();
-            }
-            else
-            {
-                GenerateSelectedCsvScenario();
+                case CsvScheduleTarget.ScenarioJobFolders:
+                    GenerateCsvScenarioJobFolders();
+                    break;
+                case CsvScheduleTarget.AllScenarios:
+                    GenerateAllCsvScenarios();
+                    break;
+                default:
+                    GenerateSelectedCsvScenario();
+                    break;
             }
 
             _logService.LogSuccess("CSV scheduler executed: " + targetLabel);
@@ -1313,9 +1829,22 @@ public partial class Form1 : Form
 
     private string GetCsvScheduleTargetLabel()
     {
-        return _cmbCsvScheduleTarget?.SelectedIndex == 1
-            ? "Generate All CSV Scenarios"
-            : "Generate Selected Scenario";
+        return GetSelectedCsvScheduleTarget() switch
+        {
+            CsvScheduleTarget.ScenarioJobFolders => "Generate Scenario Job Folders (1-3)",
+            CsvScheduleTarget.AllScenarios => "Generate All CSV Scenarios",
+            _ => "Generate Selected Scenario"
+        };
+    }
+
+    private CsvScheduleTarget GetSelectedCsvScheduleTarget()
+    {
+        return _cmbCsvScheduleTarget?.SelectedIndex switch
+        {
+            1 => CsvScheduleTarget.ScenarioJobFolders,
+            2 => CsvScheduleTarget.AllScenarios,
+            _ => CsvScheduleTarget.SelectedScenario
+        };
     }
 
     private void UpdateCsvAutomationControlState()
@@ -1618,17 +2147,399 @@ public partial class Form1 : Form
             return;
         }
 
+        var filesToDelete = new List<string>();
+        filesToDelete.AddRange(
+            Directory.GetFiles(outputFolder, "*", SearchOption.TopDirectoryOnly)
+                .Where(path => string.Equals(Path.GetExtension(path), ".csv", StringComparison.OrdinalIgnoreCase)));
+
+        var machineFolders = ParseCommaSeparatedValues(_txtCsvClientMachineFolders?.Text ?? string.Empty)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        foreach (var machineFolder in machineFolders)
+        {
+            var machineRoot = Path.Combine(outputFolder, machineFolder);
+            if (!Directory.Exists(machineRoot))
+            {
+                continue;
+            }
+
+            filesToDelete.AddRange(
+                Directory.GetFiles(machineRoot, "*", SearchOption.AllDirectories)
+                    .Where(path => string.Equals(Path.GetExtension(path), ".csv", StringComparison.OrdinalIgnoreCase)));
+        }
+
+        foreach (var scenarioFolder in GetCsvLegacyScenarioFolderNames())
+        {
+            var scenarioRoot = Path.Combine(outputFolder, scenarioFolder);
+            if (!Directory.Exists(scenarioRoot))
+            {
+                continue;
+            }
+
+            filesToDelete.AddRange(
+                Directory.GetFiles(scenarioRoot, "*", SearchOption.AllDirectories)
+                    .Where(path => string.Equals(Path.GetExtension(path), ".csv", StringComparison.OrdinalIgnoreCase)));
+        }
+
         var deleted = 0;
-        foreach (var file in Directory.GetFiles(outputFolder, "*.csv"))
+        foreach (var file in filesToDelete.Distinct(StringComparer.OrdinalIgnoreCase))
         {
             File.Delete(file);
             deleted++;
+        }
+
+        var directoriesToTrim = new List<string>();
+        foreach (var machineFolder in machineFolders)
+        {
+            var machineRoot = Path.Combine(outputFolder, machineFolder);
+            if (Directory.Exists(machineRoot))
+            {
+                directoriesToTrim.AddRange(Directory.GetDirectories(machineRoot, "*", SearchOption.AllDirectories));
+                directoriesToTrim.Add(machineRoot);
+            }
+        }
+
+        foreach (var scenarioFolder in GetCsvLegacyScenarioFolderNames())
+        {
+            var scenarioRoot = Path.Combine(outputFolder, scenarioFolder);
+            if (Directory.Exists(scenarioRoot))
+            {
+                directoriesToTrim.AddRange(Directory.GetDirectories(scenarioRoot, "*", SearchOption.AllDirectories));
+                directoriesToTrim.Add(scenarioRoot);
+            }
+        }
+
+        foreach (var directory in directoriesToTrim
+                     .Distinct(StringComparer.OrdinalIgnoreCase)
+                     .OrderByDescending(path => path.Length))
+        {
+            if (!Directory.EnumerateFileSystemEntries(directory).Any())
+            {
+                Directory.Delete(directory, recursive: false);
+            }
         }
 
         _logService.LogInfo("CSVtoDB: Cleared output folder, deleted " + deleted.ToString(CultureInfo.InvariantCulture) + " csv files");
         SetCsvStatus("(folder cleared)", 0);
         WriteStatus("CSV output folder cleared");
         RefreshLogViewer();
+    }
+
+    private DateTime ResolveCsvClientRunBaseTime()
+    {
+        var configuredBase = _dtCsvBase?.Value ?? _settings.DatetimeBase;
+        if (_csvAutomationExecutionContext is null)
+        {
+            return configuredBase;
+        }
+
+        return _armedCsvScheduleMode switch
+        {
+            CsvScheduleMode.Daily => configuredBase.AddDays(Math.Max(0, _csvAutomationExecutionContext.RunSequence - 1)),
+            CsvScheduleMode.EveryNMinutes when _csvScheduleInterval.HasValue =>
+                configuredBase.Add(TimeSpan.FromTicks(_csvScheduleInterval.Value.Ticks * Math.Max(0, _csvAutomationExecutionContext.RunSequence - 1))),
+            _ => configuredBase
+        };
+    }
+
+    private List<string> GetCsvLegacyScenarioMachineFolders()
+    {
+        return ParseCommaSeparatedValues(_txtCsvLegacyScenarioMachineFolders?.Text ?? string.Empty)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static IReadOnlyList<string> GetCsvLegacyScenarioFolderNames()
+    {
+        return new[]
+        {
+            CsvHappyPathFolderName,
+            CsvOptionalMissingFolderName,
+            CsvDuplicatePreventionFolderName
+        };
+    }
+
+    private static string BuildCsvLegacyScenarioRelativePath(string scenarioFolderName, string machineFolder, DateTime targetDate, string fileName)
+    {
+        return Path.Combine(
+            scenarioFolderName,
+            machineFolder,
+            targetDate.ToString("yyyy", CultureInfo.InvariantCulture),
+            targetDate.ToString("MM", CultureInfo.InvariantCulture),
+            targetDate.ToString("dd", CultureInfo.InvariantCulture),
+            fileName);
+    }
+
+    private static string BuildCsvLegacyScenarioDailyRelativePath(string scenarioFolderName, string machineFolder, DateTime targetDate)
+    {
+        return BuildCsvLegacyScenarioRelativePath(
+            scenarioFolderName,
+            machineFolder,
+            targetDate,
+            targetDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture) + ".csv");
+    }
+
+    private static string BuildCsvLegacyScenarioDailyFilePath(string outputRoot, string scenarioFolderName, string machineFolder, DateTime targetDate)
+    {
+        return Path.Combine(outputRoot, BuildCsvLegacyScenarioDailyRelativePath(scenarioFolderName, machineFolder, targetDate));
+    }
+
+    private static string BuildCsvClientRelativePath(string machineFolder, DateTime targetDate)
+    {
+        return Path.Combine(
+            machineFolder,
+            targetDate.ToString("yyyy", CultureInfo.InvariantCulture),
+            targetDate.ToString("MM", CultureInfo.InvariantCulture),
+            targetDate.ToString("dd", CultureInfo.InvariantCulture),
+            targetDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture) + ".CSV");
+    }
+
+    private static string BuildCsvClientDailyFilePath(string outputRoot, string machineFolder, DateTime targetDate)
+    {
+        return Path.Combine(outputRoot, BuildCsvClientRelativePath(machineFolder, targetDate));
+    }
+
+    private void AppendCsvRowsToFile(string fullPath, List<CsvMeasurementRow> rows, bool includeComment, string contextLabel)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+
+        var includeHeader = !File.Exists(fullPath) || new FileInfo(fullPath).Length == 0;
+        var content = BuildCsvContent(rows, includeComment, includeHeader);
+        File.AppendAllText(fullPath, content, new UTF8Encoding(true));
+
+        _logService.LogSuccess(
+            contextLabel + ": " +
+            (includeHeader ? "created " : "appended ") +
+            fullPath +
+            " with " +
+            rows.Count.ToString(CultureInfo.InvariantCulture) +
+            " rows");
+    }
+
+    private static int CountExistingCsvDataRows(string fullPath)
+    {
+        if (!File.Exists(fullPath))
+        {
+            return 0;
+        }
+
+        return File.ReadLines(fullPath)
+            .Skip(1)
+            .Count(line => !string.IsNullOrWhiteSpace(line));
+    }
+
+    private static DateTime ResolveCsvClientAppendStartTime(string fullPath, DateTime scheduledBaseTime)
+    {
+        var lastMeasuredAt = TryReadLastCsvMeasuredAt(fullPath);
+        if (!lastMeasuredAt.HasValue)
+        {
+            return scheduledBaseTime;
+        }
+
+        var nextMeasuredAt = lastMeasuredAt.Value.AddMinutes(1);
+        return nextMeasuredAt > scheduledBaseTime ? nextMeasuredAt : scheduledBaseTime;
+    }
+
+    private static DateTime? TryReadLastCsvMeasuredAt(string fullPath)
+    {
+        if (!File.Exists(fullPath))
+        {
+            return null;
+        }
+
+        var lastDataLine = File.ReadLines(fullPath)
+            .Where(line => !string.IsNullOrWhiteSpace(line))
+            .LastOrDefault(line => !line.StartsWith("Serial,", StringComparison.OrdinalIgnoreCase));
+
+        if (string.IsNullOrWhiteSpace(lastDataLine))
+        {
+            return null;
+        }
+
+        var parts = lastDataLine.Split(',');
+        if (parts.Length < 3)
+        {
+            return null;
+        }
+
+        var measuredAtToken = parts[2].Trim().Trim('"');
+        return DateTime.TryParseExact(
+            measuredAtToken,
+            "yyyyMMddHHmmss",
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.None,
+            out var measuredAt)
+            ? measuredAt
+            : null;
+    }
+
+    private static bool IsValidCsvMachineFolderName(string machineFolder)
+    {
+        return !string.IsNullOrWhiteSpace(machineFolder) &&
+               machineFolder.IndexOfAny(Path.GetInvalidFileNameChars()) < 0 &&
+               !machineFolder.Contains(Path.DirectorySeparatorChar) &&
+               !machineFolder.Contains(Path.AltDirectorySeparatorChar);
+    }
+
+    private static bool ValidateCsvScenarioJobRowCount(int rowCount, int machineCount, string scenarioLabel)
+    {
+        if (rowCount >= machineCount)
+        {
+            return true;
+        }
+
+        MessageBox.Show(
+            scenarioLabel + " row count must be at least the number of configured machine folders so each machine gets at least one row.",
+            "CSVtoDB",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Warning);
+        return false;
+    }
+
+    private Dictionary<string, List<CsvMeasurementRow>> BuildCsvScenarioDailyRowsByMachine(
+        string scenarioFolderName,
+        string keyPrefix,
+        long startNumber,
+        int totalRowCount,
+        IReadOnlyList<string> machineFolders,
+        IReadOnlyList<string> statuses,
+        bool includeComment,
+        DateTime scheduledBaseTime,
+        bool generateFreshRowsPerRun)
+    {
+        var outputFolder = EnsureCsvOutputFolder();
+        if (outputFolder is null)
+        {
+            return new Dictionary<string, List<CsvMeasurementRow>>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        var targetDate = scheduledBaseTime.Date;
+        var rowsByMachine = new Dictionary<string, List<CsvMeasurementRow>>(StringComparer.OrdinalIgnoreCase);
+        var baseRowsPerMachine = totalRowCount / machineFolders.Count;
+        var remainder = totalRowCount % machineFolders.Count;
+        var totalExistingRows = generateFreshRowsPerRun
+            ? machineFolders.Sum(machineFolder =>
+                CountExistingCsvDataRows(BuildCsvLegacyScenarioDailyFilePath(outputFolder, scenarioFolderName, machineFolder, targetDate)))
+            : 0;
+        var nextSerialNumber = startNumber + totalExistingRows;
+        var rowOffset = 0;
+
+        for (var machineIndex = 0; machineIndex < machineFolders.Count; machineIndex++)
+        {
+            var machineFolder = machineFolders[machineIndex];
+            var rowCountForMachine = baseRowsPerMachine + (machineIndex < remainder ? 1 : 0);
+            var machineRows = new List<CsvMeasurementRow>(rowCountForMachine);
+            var fullPath = BuildCsvLegacyScenarioDailyFilePath(outputFolder, scenarioFolderName, machineFolder, targetDate);
+            var machineStartTime = generateFreshRowsPerRun
+                ? ResolveCsvClientAppendStartTime(fullPath, scheduledBaseTime)
+                : scheduledBaseTime.AddMinutes(rowOffset);
+
+            for (var rowIndex = 0; rowIndex < rowCountForMachine; rowIndex++)
+            {
+                var globalRowIndex = rowOffset + rowIndex;
+                var status = statuses[globalRowIndex % statuses.Count];
+                var serialNumber = generateFreshRowsPerRun
+                    ? nextSerialNumber++
+                    : startNumber + globalRowIndex;
+                var measuredAt = machineStartTime.AddMinutes(rowIndex);
+                var profileRowIndex = generateFreshRowsPerRun
+                    ? totalExistingRows + globalRowIndex
+                    : globalRowIndex;
+
+                machineRows.Add(BuildCsvMeasurementRow(
+                    keyPrefix,
+                    serialNumber,
+                    machineFolder,
+                    status,
+                    measuredAt,
+                    includeComment,
+                    profileRowIndex,
+                    useAutomationSuffix: false));
+            }
+
+            rowsByMachine[machineFolder] = machineRows;
+            rowOffset += rowCountForMachine;
+        }
+
+        return rowsByMachine;
+    }
+
+    private Dictionary<string, List<CsvMeasurementRow>> BuildCsvRowsByMachine(
+        string keyPrefix,
+        long startNumber,
+        int totalRowCount,
+        IReadOnlyList<string> machineFolders,
+        IReadOnlyList<string> statuses,
+        bool includeComment,
+        DateTime baseTime,
+        bool useAutomationSuffix)
+    {
+        var rowsByMachine = new Dictionary<string, List<CsvMeasurementRow>>(StringComparer.OrdinalIgnoreCase);
+        var baseRowsPerMachine = totalRowCount / machineFolders.Count;
+        var remainder = totalRowCount % machineFolders.Count;
+        var nextSerialNumber = startNumber;
+        var rowOffset = 0;
+
+        for (var machineIndex = 0; machineIndex < machineFolders.Count; machineIndex++)
+        {
+            var machineFolder = machineFolders[machineIndex];
+            var rowCountForMachine = baseRowsPerMachine + (machineIndex < remainder ? 1 : 0);
+            var machineRows = new List<CsvMeasurementRow>(rowCountForMachine);
+
+            for (var rowIndex = 0; rowIndex < rowCountForMachine; rowIndex++)
+            {
+                var globalRowIndex = rowOffset + rowIndex;
+                var status = statuses[globalRowIndex % statuses.Count];
+                var measuredAt = baseTime.AddMinutes(globalRowIndex);
+                machineRows.Add(BuildCsvMeasurementRow(
+                    keyPrefix,
+                    nextSerialNumber++,
+                    machineFolder,
+                    status,
+                    measuredAt,
+                    includeComment,
+                    globalRowIndex,
+                    useAutomationSuffix));
+            }
+
+            rowsByMachine[machineFolder] = machineRows;
+            rowOffset += rowCountForMachine;
+        }
+
+        return rowsByMachine;
+    }
+
+    private void WriteCsvToScenarioFolders(
+        string scenarioFolderName,
+        IReadOnlyDictionary<string, List<CsvMeasurementRow>> rowsByMachine,
+        bool includeComment,
+        string contextLabel,
+        DateTime targetDate,
+        ICollection<string> summaries)
+    {
+        var outputFolder = EnsureCsvOutputFolder();
+        if (outputFolder is null)
+        {
+            return;
+        }
+
+        var totalRows = 0;
+        foreach (var entry in rowsByMachine)
+        {
+            if (entry.Value.Count == 0)
+            {
+                continue;
+            }
+
+            var relativePath = BuildCsvLegacyScenarioDailyRelativePath(scenarioFolderName, entry.Key, targetDate);
+            var fullPath = Path.Combine(outputFolder, relativePath);
+            AppendCsvRowsToFile(fullPath, entry.Value, includeComment, contextLabel);
+
+            summaries.Add(relativePath + " (+" + entry.Value.Count.ToString(CultureInfo.InvariantCulture) + " rows)");
+            totalRows += entry.Value.Count;
+        }
+
+        SetCsvStatus(scenarioFolderName + "/*", totalRows);
     }
 
     private List<CsvMeasurementRow> BuildCsvRows(
@@ -1638,7 +2549,8 @@ public partial class Form1 : Form
         IReadOnlyList<string> machineCodes,
         IReadOnlyList<string> statuses,
         bool includeComment,
-        DateTime baseTime)
+        DateTime baseTime,
+        bool useAutomationSuffix = true)
     {
         var rows = new List<CsvMeasurementRow>(rowCount);
         for (var i = 0; i < rowCount; i++)
@@ -1653,7 +2565,8 @@ public partial class Form1 : Form
                 status,
                 rowTime,
                 includeComment,
-                i));
+                i,
+                useAutomationSuffix));
         }
 
         return rows;
@@ -1666,12 +2579,13 @@ public partial class Form1 : Form
         string status,
         DateTime measuredAt,
         bool includeComment,
-        int rowIndex)
+        int rowIndex,
+        bool useAutomationSuffix = true)
     {
         var profile = BuildMeasurementProfile(rowIndex, status);
         var resolvedPrefix = keyPrefix;
         var resolvedSerialNumber = serialNumber;
-        if (_csvAutomationExecutionContext is not null)
+        if (useAutomationSuffix && _csvAutomationExecutionContext is not null)
         {
             var runSuffix =
                 _csvAutomationExecutionContext.RunStamp.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture) +
@@ -1784,16 +2698,19 @@ public partial class Form1 : Form
         RefreshLogViewer();
     }
 
-    private static string BuildCsvContent(IEnumerable<CsvMeasurementRow> rows, bool includeComment)
+    private static string BuildCsvContent(IEnumerable<CsvMeasurementRow> rows, bool includeComment, bool includeHeader = true)
     {
         var builder = new StringBuilder();
-        builder.Append("Serial,WorkDate,MeasuredAt,MachineCode,OK/NG,Measure1(P1),Measure2(P2),Measure3(P3),Measure4(P4),Beta1(P5),Beta2(P6),Beta3(P7),Beta4(P8),Beta5(P9),Beta6(P10),BetaRange(P5~P10),BetaAverage(P5~P10)");
-        if (includeComment)
+        if (includeHeader)
         {
-            builder.Append(",Comment");
-        }
+            builder.Append("Serial,WorkDate,MeasuredAt,MachineCode,OK/NG,Measure1(P1),Measure2(P2),Measure3(P3),Measure4(P4),Beta1(P5),Beta2(P6),Beta3(P7),Beta4(P8),Beta5(P9),Beta6(P10),BetaRange(P5~P10),BetaAverage(P5~P10)");
+            if (includeComment)
+            {
+                builder.Append(",Comment");
+            }
 
-        builder.AppendLine();
+            builder.AppendLine();
+        }
 
         foreach (var row in rows)
         {
@@ -2362,73 +3279,51 @@ public partial class Form1 : Form
             BackColor = ShellBackground
         };
 
-        var canvas = new Panel
-        {
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            BackColor = Color.Transparent,
-            Location = new Point(0, 0),
-            Margin = new Padding(0),
-            Padding = new Padding(0)
-        };
-
         stack = new FlowLayoutPanel
         {
             FlowDirection = FlowDirection.TopDown,
             WrapContents = false,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            AutoSize = false,
             Margin = new Padding(0),
             Padding = new Padding(0),
             Location = new Point(0, 0),
-            BackColor = Color.Transparent
+            BackColor = Color.Transparent,
+            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
         };
 
-        canvas.Controls.Add(stack);
-        page.Controls.Add(canvas);
+        page.Controls.Add(stack);
         var stackRef = stack;
-        var canvasRef = canvas;
-        page.Resize += (_, _) => ResizeStackCards(page, canvasRef, stackRef);
-        stack.ControlAdded += (_, _) => ResizeStackCards(page, canvasRef, stackRef);
-        stack.ControlRemoved += (_, _) => ResizeStackCards(page, canvasRef, stackRef);
+        page.Resize += (_, _) => ResizeStackCards(page, stackRef);
+        stack.ControlAdded += (_, _) => ResizeStackCards(page, stackRef);
+        stack.ControlRemoved += (_, _) => ResizeStackCards(page, stackRef);
         return page;
     }
 
     private static void ResizeStackCards(Panel page, FlowLayoutPanel stack)
     {
-        if (page.Controls.Count == 0 || page.Controls[0] is not Panel canvas)
-        {
-            return;
-        }
-
-        ResizeStackCards(page, canvas, stack);
-    }
-
-    private static void ResizeStackCards(Panel page, Panel canvas, FlowLayoutPanel stack)
-    {
-        var targetWidth = Math.Max(340, page.ClientSize.Width - 8 - SystemInformation.VerticalScrollBarWidth);
-
-        canvas.SuspendLayout();
+        var targetWidth = Math.Max(320, page.ClientSize.Width - 2);
         stack.SuspendLayout();
 
-        canvas.Width = targetWidth;
+        stack.Left = 0;
+        stack.Top = 0;
         stack.Width = targetWidth;
 
         foreach (Control control in stack.Controls)
         {
+            control.Margin = new Padding(0, 0, 0, 16);
             control.Width = targetWidth;
+            control.MinimumSize = new Size(targetWidth, control.MinimumSize.Height);
             control.MaximumSize = new Size(targetWidth, 0);
             UpdateResponsiveCardMetrics(control, targetWidth);
+            control.PerformLayout();
+            control.Height = Math.Max(control.MinimumSize.Height, control.GetPreferredSize(new Size(targetWidth, 0)).Height);
         }
 
-        var preferredHeight = stack.PreferredSize.Height;
-        canvas.Height = preferredHeight;
-        canvas.Left = Math.Max(0, (page.ClientSize.Width - targetWidth) / 2);
-        canvas.Top = 0;
+        var preferredHeight = stack.Controls.Cast<Control>().Sum(control => control.Height + control.Margin.Vertical);
+        stack.Height = preferredHeight;
         page.AutoScrollMinSize = new Size(0, preferredHeight + 8);
 
         stack.ResumeLayout(true);
-        canvas.ResumeLayout(true);
     }
 
     private static Panel CreateCard(string title, string description, out TableLayoutPanel content)
@@ -2436,8 +3331,6 @@ public partial class Form1 : Form
         var card = new Panel
         {
             BackColor = CardBackground,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
             Padding = new Padding(22),
             Margin = new Padding(0, 0, 0, 16)
         };
@@ -2445,9 +3338,10 @@ public partial class Form1 : Form
 
         var layout = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill,
+            Dock = DockStyle.Top,
             ColumnCount = 1,
             AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
             BackColor = Color.Transparent
         };
 
@@ -2677,6 +3571,9 @@ public partial class Form1 : Form
         }
 
         var compact = ClientSize.Width < 1360;
+        var heroTextWidth = compact
+            ? Math.Max(360, ClientSize.Width - 120)
+            : Math.Max(520, ClientSize.Width - 500);
 
         _heroLayout.SuspendLayout();
         _heroActions.SuspendLayout();
@@ -2725,6 +3622,16 @@ public partial class Form1 : Form
             _heroActions.MaximumSize = Size.Empty;
         }
 
+        if (_heroSubtitleLabel is not null)
+        {
+            _heroSubtitleLabel.MaximumSize = new Size(heroTextWidth, 0);
+        }
+
+        if (_heroMetaLabel is not null)
+        {
+            _heroMetaLabel.MaximumSize = new Size(heroTextWidth, 0);
+        }
+
         _heroActions.ResumeLayout(true);
         _heroLayout.ResumeLayout(true);
     }
@@ -2742,13 +3649,14 @@ public partial class Form1 : Form
             return;
         }
 
-        var desiredWidth = availableWidth >= 1800 ? 420 :
-            availableWidth >= 1500 ? 400 :
-            availableWidth >= 1280 ? 380 :
-            availableWidth >= 1120 ? 360 :
-            330;
+        var desiredWidth = availableWidth >= 1800 ? 390 :
+            availableWidth >= 1500 ? 360 :
+            availableWidth >= 1280 ? 330 :
+            availableWidth >= 1120 ? 300 :
+            availableWidth >= 960 ? 280 :
+            260;
 
-        var maxAllowed = Math.Max(_mainSplitContainer.Panel1MinSize, availableWidth - 420);
+        var maxAllowed = Math.Max(_mainSplitContainer.Panel1MinSize, availableWidth - 360);
         var finalWidth = Math.Clamp(desiredWidth, _mainSplitContainer.Panel1MinSize, maxAllowed);
 
         if (finalWidth > 0 && _mainSplitContainer.SplitterDistance != finalWidth)
@@ -2785,15 +3693,25 @@ public partial class Form1 : Form
             return;
         }
 
-        var availableWidth = Math.Max(300, _navigationStack.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - 4);
-        var buttonHeight = availableWidth >= 340 ? 88 : 96;
+        var availableWidth = Math.Max(240, _navigationStack.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - 4);
 
         foreach (var item in _navButtons.Values)
         {
+            var textWidth = Math.Max(180, availableWidth - 32);
+            item.TitleLabel.MaximumSize = new Size(textWidth, 0);
+            item.SubtitleLabel.MaximumSize = new Size(textWidth, 0);
+
+            var titleHeight = item.TitleLabel.GetPreferredSize(new Size(textWidth, 0)).Height;
+            var subtitleHeight = item.SubtitleLabel.GetPreferredSize(new Size(textWidth, 0)).Height;
+            var buttonHeight = Math.Max(88, 24 + titleHeight + subtitleHeight + 18);
+
             item.Container.Width = availableWidth;
             item.Container.Height = buttonHeight;
-            item.TitleLabel.MaximumSize = new Size(Math.Max(220, availableWidth - 32), 0);
-            item.SubtitleLabel.MaximumSize = new Size(Math.Max(220, availableWidth - 32), 0);
+        }
+
+        if (_navigationFooterLabel is not null)
+        {
+            _navigationFooterLabel.MaximumSize = new Size(Math.Max(220, availableWidth - 8), 0);
         }
     }
 
@@ -2969,6 +3887,8 @@ public partial class Form1 : Form
             _dtCsvBase.Value = _settings.DatetimeBase;
         }
 
+        UpdateCsvClientPatternPreview();
+        UpdateCsvLegacyScenarioPreview();
         RefreshAdvancedModuleDefaultsFromSettings();
 
         _settingsDirty = false;
@@ -3642,6 +4562,13 @@ public partial class Form1 : Form
         OneTime,
         Daily,
         EveryNMinutes
+    }
+
+    private enum CsvScheduleTarget
+    {
+        SelectedScenario,
+        ScenarioJobFolders,
+        AllScenarios
     }
 
     private sealed record CsvAutomationExecutionContext(DateTime RunStamp, int RunSequence);

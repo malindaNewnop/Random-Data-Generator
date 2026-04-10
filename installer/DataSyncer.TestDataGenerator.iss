@@ -14,6 +14,10 @@
   #define OutputDir "..\artifacts\installer"
 #endif
 
+#ifndef OutputBaseSuffix
+  #define OutputBaseSuffix ""
+#endif
+
 [Setup]
 AppId={{88E3FB3D-80E7-4E02-9B53-D6C5C65A52C1}
 AppName={#MyAppName}
@@ -22,11 +26,13 @@ AppPublisher={#MyAppPublisher}
 DefaultDirName={localappdata}\Programs\DataSyncer Test Data Generator
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
+#ifdef IsX64
 ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
+#endif
 PrivilegesRequired=lowest
 OutputDir={#OutputDir}
-OutputBaseFilename=DataSyncer-TestDataGenerator-Setup-{#AppVersion}
+OutputBaseFilename=DataSyncer-TestDataGenerator-Setup-{#AppVersion}{#OutputBaseSuffix}
 UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma
 SolidCompression=yes

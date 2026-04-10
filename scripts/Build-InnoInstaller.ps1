@@ -1,6 +1,7 @@
 param(
     [string]$Configuration = "Release",
     [string]$RuntimeIdentifier = "win-x64",
+    [string]$PublishDirOverride,
     [string]$Version,
     [switch]$SkipPublish,
     [switch]$SkipInstaller
@@ -49,8 +50,22 @@ function Get-InnoCompiler {
 $repoRoot = Get-RepoRoot
 $projectPath = Join-Path $repoRoot "DataSyncer.TestDataGenerator.App\DataSyncer.TestDataGenerator.App.csproj"
 $installerScript = Join-Path $repoRoot "installer\DataSyncer.TestDataGenerator.iss"
-$publishDir = Join-Path $repoRoot ("artifacts\publish\" + $RuntimeIdentifier)
 $installerOutputDir = Join-Path $repoRoot "artifacts\installer"
+
+if (-not [string]::IsNullOrWhiteSpace($PublishDirOverride)) {
+    $publishDir = (Resolve-Path $PublishDirOverride).Path
+}
+else {
+    $publishDir = Join-Path $repoRoot ("artifacts\publish\" + $RuntimeIdentifier)
+}
+
+$effectiveRuntimeIdentifier = $RuntimeIdentifier
+if (-not [string]::IsNullOrWhiteSpace($PublishDirOverride)) {
+    $publishLeaf = Split-Path $publishDir -Leaf
+    if ($publishLeaf -match '^win-(x64|x86|arm64)$') {
+        $effectiveRuntimeIdentifier = $publishLeaf
+    }
+}
 
 if ([string]::IsNullOrWhiteSpace($Version)) {
     $Version = Get-ProjectVersion -ProjectPath $projectPath
@@ -98,8 +113,13 @@ if (-not $SkipInstaller) {
         "/DAppVersion=$Version",
         "/DPublishDir=$publishDir",
         "/DOutputDir=$installerOutputDir",
+        "/DOutputBaseSuffix=-$effectiveRuntimeIdentifier",
         $installerScript
     )
+
+    if ($effectiveRuntimeIdentifier -like "*x64*") {
+        $compilerArgs = @("/DIsX64=1") + $compilerArgs
+    }
 
     & $compiler @compilerArgs
     if ($LASTEXITCODE -ne 0) {
