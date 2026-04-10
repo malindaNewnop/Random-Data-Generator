@@ -28,6 +28,19 @@ public partial class Form1
     private DateTimePicker? _dtDbToDbS3OutsideDate;
     private TextBox? _txtDbToDbS3WorkCenters;
     private CheckBox? _chkDbToDbS3PreloadDestination;
+    private ComboBox? _cmbDbToDbScheduleMode;
+    private DateTimePicker? _dtDbToDbScheduleAt;
+    private NumericUpDown? _numDbToDbScheduleIntervalMinutes;
+    private ComboBox? _cmbDbToDbScheduleTarget;
+    private Label? _lblDbToDbScheduleStatus;
+    private ProgressBar? _progressDbToDbScenario3;
+    private Label? _lblDbToDbScenario3Progress;
+    private readonly System.Windows.Forms.Timer _dbToDbScheduleTimer = new() { Interval = 1000 };
+    private DateTime? _dbToDbScheduledRunAt;
+    private DbToDbScheduleMode _armedDbToDbScheduleMode = DbToDbScheduleMode.OneTime;
+    private TimeSpan? _dbToDbScheduleInterval;
+    private DbToDbAutomationExecutionContext? _dbToDbAutomationExecutionContext;
+    private int _dbToDbAutomationRunSequence;
 
     private ComboBox? _cmbDbToJsonConnection;
     private TextBox? _txtDbToJsonSourceTable;
@@ -47,6 +60,17 @@ public partial class Form1
     private TextBox? _txtDbToJsonS2DataUsgqty;
     private Label? _lblDbToJsonPingStatus;
     private Label? _lblDbToJsonReRunCounts;
+    private ComboBox? _cmbDbToJsonScheduleMode;
+    private DateTimePicker? _dtDbToJsonScheduleAt;
+    private NumericUpDown? _numDbToJsonScheduleIntervalMinutes;
+    private ComboBox? _cmbDbToJsonScheduleTarget;
+    private Label? _lblDbToJsonScheduleStatus;
+    private readonly System.Windows.Forms.Timer _dbToJsonScheduleTimer = new() { Interval = 1000 };
+    private DateTime? _dbToJsonScheduledRunAt;
+    private DbToJsonScheduleMode _armedDbToJsonScheduleMode = DbToJsonScheduleMode.OneTime;
+    private TimeSpan? _dbToJsonScheduleInterval;
+    private DbToJsonAutomationExecutionContext? _dbToJsonAutomationExecutionContext;
+    private int _dbToJsonAutomationRunSequence;
 
     private ComboBox? _cmbSqlQueryConnection;
     private TextBox? _txtSqlQueryTableName;
@@ -55,6 +79,21 @@ public partial class Form1
     private NumericUpDown? _numSqlQueryTotalRows;
     private NumericUpDown? _numSqlQueryPendingRows;
     private NumericUpDown? _numSqlQueryDoneRows;
+    private DateTimePicker? _dtSqlQueryEventTimeBase;
+    private TextBox? _txtSqlQueryScenario1UpdateSql;
+    private TextBox? _txtSqlQueryScenario2InvalidSql;
+    private TextBox? _txtSqlQueryScenario3BrokenConnection;
+    private ComboBox? _cmbSqlQueryScheduleMode;
+    private DateTimePicker? _dtSqlQueryScheduleAt;
+    private NumericUpDown? _numSqlQueryScheduleIntervalMinutes;
+    private ComboBox? _cmbSqlQueryScheduleTarget;
+    private Label? _lblSqlQueryScheduleStatus;
+    private readonly System.Windows.Forms.Timer _sqlQueryScheduleTimer = new() { Interval = 1000 };
+    private DateTime? _sqlQueryScheduledRunAt;
+    private SqlQueryScheduleMode _armedSqlQueryScheduleMode = SqlQueryScheduleMode.OneTime;
+    private TimeSpan? _sqlQueryScheduleInterval;
+    private SqlQueryAutomationExecutionContext? _sqlQueryAutomationExecutionContext;
+    private int _sqlQueryAutomationRunSequence;
 
     private TextBox? _txtProgramS1ScriptPath;
     private TextBox? _txtProgramS1OutputFile;
@@ -66,12 +105,25 @@ public partial class Form1
     private TextBox? _txtProgramS3OutputFile;
     private TextBox? _txtProgramS3MessagePrefix;
     private TextBox? _txtProgramS3CommandPreview;
+    private Label? _lblProgramS3Status;
+    private ComboBox? _cmbProgramScheduleMode;
+    private DateTimePicker? _dtProgramScheduleAt;
+    private NumericUpDown? _numProgramScheduleIntervalMinutes;
+    private ComboBox? _cmbProgramScheduleTarget;
+    private Label? _lblProgramScheduleStatus;
+    private readonly System.Windows.Forms.Timer _programScheduleTimer = new() { Interval = 1000 };
+    private DateTime? _programScheduledRunAt;
+    private ProgramScheduleMode _armedProgramScheduleMode = ProgramScheduleMode.OneTime;
+    private TimeSpan? _programScheduleInterval;
+    private ProgramAutomationExecutionContext? _programAutomationExecutionContext;
+    private int _programAutomationRunSequence;
 
     private Control CreateDbToDbPage()
     {
         var page = CreateScrollablePage(out var stack);
 
         stack.Controls.Add(CreateDbToDbConnectionCard());
+        stack.Controls.Add(CreateDbToDbAutomationCard());
         stack.Controls.Add(CreateDbToDbScenario1Card());
         stack.Controls.Add(CreateDbToDbScenario2Card());
         stack.Controls.Add(CreateDbToDbScenario3Card());
@@ -85,6 +137,7 @@ public partial class Form1
         var page = CreateScrollablePage(out var stack);
 
         stack.Controls.Add(CreateDbToJsonConnectionCard());
+        stack.Controls.Add(CreateDbToJsonAutomationCard());
         stack.Controls.Add(CreateDbToJsonScenario1Card());
         stack.Controls.Add(CreateDbToJsonScenario2Card());
         stack.Controls.Add(CreateDbToJsonScenario3Card());
@@ -97,17 +150,10 @@ public partial class Form1
     {
         var page = CreateScrollablePage(out var stack);
 
+        stack.Controls.Add(CreateSqlQueryAutomationCard());
         stack.Controls.Add(CreateSqlQueryScenario1Card());
-        stack.Controls.Add(CreateSqlQueryReminderCard(
-            "Scenario 2 - Invalid SQL",
-            "Place intentionally malformed SQL in the DataSyncer job configuration. Optionally keep the Scenario 1 test table in place to confirm that no valid change occurred.",
-            WarningSoft,
-            WarningColor));
-        stack.Controls.Add(CreateSqlQueryReminderCard(
-            "Scenario 3 - Wrong DB Connection",
-            "Configure a broken connection string with a bad host, credentials, or mismatched DB type. The Scenario 1 test table may remain; no special data is required.",
-            DangerSoft,
-            DangerColor));
+        stack.Controls.Add(CreateSqlQueryScenario2Card());
+        stack.Controls.Add(CreateSqlQueryScenario3Card());
 
         ResizeStackCards(page, stack);
         return page;
@@ -117,6 +163,7 @@ public partial class Form1
     {
         var page = CreateScrollablePage(out var stack);
 
+        stack.Controls.Add(CreateProgramAutomationCard());
         stack.Controls.Add(CreateProgramScenario1Card());
         stack.Controls.Add(CreateProgramScenario2Card());
         stack.Controls.Add(CreateProgramScenario3Card());
@@ -171,6 +218,104 @@ public partial class Form1
         return card;
     }
 
+    private Control CreateDbToDbAutomationCard()
+    {
+        var card = CreateCard("DBtoDB Automation Timer", "Keep this application open and arm recurring DBtoDB scenario preparation. For example, choose Every N minutes and set the value to 1 to refresh DB test data every minute.", out var content);
+        var grid = CreateCsvFormGrid();
+
+        AddLabelCell(grid, "Automation mode", 0);
+        _cmbDbToDbScheduleMode = new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Anchor = AnchorStyles.Left | AnchorStyles.Right,
+            Margin = new Padding(0, 0, 12, 12),
+            AccessibleName = "DBtoDB automation mode"
+        };
+        _cmbDbToDbScheduleMode.Items.AddRange(new object[]
+        {
+            "Run Once At Selected Time",
+            "Repeat Daily At Selected Time",
+            "Repeat Every N Minutes"
+        });
+        _cmbDbToDbScheduleMode.SelectedIndex = 0;
+        _cmbDbToDbScheduleMode.SelectedIndexChanged += (_, _) => UpdateDbToDbAutomationControlState();
+        _toolTip.SetToolTip(_cmbDbToDbScheduleMode, "Choose whether the DBtoDB scheduler runs once, repeats daily, or repeats every N minutes.");
+        grid.Controls.Add(_cmbDbToDbScheduleMode, 1, 0);
+
+        AddLabelCell(grid, "Run at", 1);
+        _dtDbToDbScheduleAt = new DateTimePicker
+        {
+            Format = DateTimePickerFormat.Custom,
+            CustomFormat = "yyyy-MM-dd HH:mm:ss",
+            ShowUpDown = true,
+            Anchor = AnchorStyles.Left | AnchorStyles.Right,
+            Value = DateTime.Now.AddMinutes(5),
+            Margin = new Padding(0, 0, 12, 12),
+            AccessibleName = "DBtoDB scheduled run time"
+        };
+        _toolTip.SetToolTip(_dtDbToDbScheduleAt, "Date and time used for one-time and daily DBtoDB automation.");
+        grid.Controls.Add(_dtDbToDbScheduleAt, 1, 1);
+
+        AddLabelCell(grid, "Every N minutes", 2);
+        _numDbToDbScheduleIntervalMinutes = CreateCsvNumeric(1, 1440, 1, "Interval in minutes for recurring DBtoDB preparation.");
+        _numDbToDbScheduleIntervalMinutes.AccessibleName = "DBtoDB automation interval minutes";
+        grid.Controls.Add(_numDbToDbScheduleIntervalMinutes, 1, 2);
+
+        AddLabelCell(grid, "Timer target", 3);
+        _cmbDbToDbScheduleTarget = new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Anchor = AnchorStyles.Left | AnchorStyles.Right,
+            Margin = new Padding(0, 0, 12, 12),
+            AccessibleName = "DBtoDB automation target"
+        };
+        _cmbDbToDbScheduleTarget.Items.AddRange(new object[]
+        {
+            "Generate Scenario 1",
+            "Generate Scenario 2",
+            "Generate Scenario 3",
+            "Generate All DBtoDB Scenarios"
+        });
+        _cmbDbToDbScheduleTarget.SelectedIndex = 0;
+        _toolTip.SetToolTip(_cmbDbToDbScheduleTarget, "Choose which DBtoDB scenario setup the timer should generate.");
+        grid.Controls.Add(_cmbDbToDbScheduleTarget, 1, 3);
+
+        content.Controls.Add(grid);
+
+        var actions = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            WrapContents = true,
+            Margin = new Padding(0, 8, 0, 0)
+        };
+        actions.Controls.Add(CreateActionButton("Arm Timer", (_, _) => ArmDbToDbSchedule(), true));
+        actions.Controls.Add(CreateActionButton("Cancel Timer", (_, _) => CancelDbToDbSchedule()));
+        actions.Controls.Add(CreateActionButton("Run Target Now", (_, _) => RunDbToDbScheduledTarget()));
+        content.Controls.Add(actions);
+
+        _lblDbToDbScheduleStatus = new Label
+        {
+            Text = "DBtoDB scheduler idle. Choose a mode, then arm the timer.",
+            AutoSize = true,
+            MaximumSize = new Size(1020, 0),
+            ForeColor = MutedText,
+            Margin = new Padding(0, 8, 0, 0)
+        };
+        content.Controls.Add(_lblDbToDbScheduleStatus);
+
+        content.Controls.Add(CreateInfoNote(
+            "Automation note",
+            "Scheduled DBtoDB runs use a new SourceId batch offset each time so repeated timer runs do not keep colliding with the same IDs.",
+            AccentSoft,
+            AccentColor));
+
+        _dbToDbScheduleTimer.Tick -= OnDbToDbScheduleTimerTick;
+        _dbToDbScheduleTimer.Tick += OnDbToDbScheduleTimerTick;
+
+        UpdateDbToDbAutomationControlState();
+        return card;
+    }
+
     private Control CreateDbToDbScenario1Card()
     {
         var card = CreateCard("Scenario 1 - Immediate Flag-Based Copy", "Insert fresh source rows with the not-processed flag and optionally clear the destination table before the test run.", out var content);
@@ -211,6 +356,11 @@ public partial class Form1
 
         content.Controls.Add(grid);
         content.Controls.Add(CreateActionButton("Generate Scenario 1 Data", (_, _) => GenerateDbToDbScenario1(), true));
+        content.Controls.Add(CreateInfoNote(
+            "Expected after job",
+            "Use this setup when the DBtoDB job should fetch fresh source rows, copy them into the destination, and then update the source flags from the not-processed value to the processed value. The destination table is created automatically if needed.",
+            AccentSoft,
+            AccentColor));
         return card;
     }
 
@@ -250,6 +400,11 @@ public partial class Form1
 
         content.Controls.Add(grid);
         content.Controls.Add(CreateActionButton("Generate Scenario 2 Data", (_, _) => GenerateDbToDbScenario2(), true));
+        content.Controls.Add(CreateInfoNote(
+            "Expected after job",
+            "This setup leaves the same records in source and destination so the DBtoDB job can exercise duplicate-safe handling. Use the conflict reminder to align your DataSyncer job configuration with the scenario you want to validate.",
+            WarningSoft,
+            WarningColor));
         return card;
     }
 
@@ -290,6 +445,34 @@ public partial class Form1
         content.Controls.Add(grid);
         content.Controls.Add(CreateInfoNote("Scenario layout", "This generator always adds 5 mixed-condition rows in addition to the inside-range and outside-range counts.", AccentSoft, AccentColor));
         content.Controls.Add(CreateActionButton("Generate Scenario 3 Data", (_, _) => GenerateDbToDbScenario3(), true));
+
+        _progressDbToDbScenario3 = new ProgressBar
+        {
+            Style = ProgressBarStyle.Continuous,
+            Minimum = 0,
+            Maximum = 100,
+            Value = 0,
+            Height = 22,
+            Dock = DockStyle.Top,
+            Margin = new Padding(0, 10, 0, 0)
+        };
+        content.Controls.Add(_progressDbToDbScenario3);
+
+        _lblDbToDbScenario3Progress = new Label
+        {
+            Text = "Scenario 3 progress is idle.",
+            AutoSize = true,
+            MaximumSize = new Size(1020, 0),
+            ForeColor = MutedText,
+            Margin = new Padding(0, 8, 0, 0)
+        };
+        content.Controls.Add(_lblDbToDbScenario3Progress);
+
+        content.Controls.Add(CreateInfoNote(
+            "Expected after job",
+            "Use this setup to validate delete-and-reinsert behavior for a selected date range and filter condition. When preloading destination rows is enabled, the destination is primed with matching stale rows so the manual copy path can remove them before reinsert.",
+            AccentSoft,
+            AccentColor));
         return card;
     }
 
@@ -334,6 +517,104 @@ public partial class Form1
         return card;
     }
 
+    private Control CreateDbToJsonAutomationCard()
+    {
+        var card = CreateCard("DBtoJSON Automation Timer", "Keep this application open and arm recurring DBtoJSON preparation so DataSyncer can keep finding fresh export rows at fixed time gaps.", out var content);
+        var grid = CreateCsvFormGrid();
+
+        AddLabelCell(grid, "Automation mode", 0);
+        _cmbDbToJsonScheduleMode = new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Anchor = AnchorStyles.Left | AnchorStyles.Right,
+            Margin = new Padding(0, 0, 12, 12),
+            AccessibleName = "DBtoJSON automation mode"
+        };
+        _cmbDbToJsonScheduleMode.Items.AddRange(new object[]
+        {
+            "Run Once At Selected Time",
+            "Repeat Daily At Selected Time",
+            "Repeat Every N Minutes"
+        });
+        _cmbDbToJsonScheduleMode.SelectedIndex = 0;
+        _cmbDbToJsonScheduleMode.SelectedIndexChanged += (_, _) => UpdateDbToJsonAutomationControlState();
+        _toolTip.SetToolTip(_cmbDbToJsonScheduleMode, "Choose whether the DBtoJSON scheduler runs once, repeats daily, or repeats every N minutes.");
+        grid.Controls.Add(_cmbDbToJsonScheduleMode, 1, 0);
+
+        AddLabelCell(grid, "Run at", 1);
+        _dtDbToJsonScheduleAt = new DateTimePicker
+        {
+            Format = DateTimePickerFormat.Custom,
+            CustomFormat = "yyyy-MM-dd HH:mm:ss",
+            ShowUpDown = true,
+            Anchor = AnchorStyles.Left | AnchorStyles.Right,
+            Value = DateTime.Now.AddMinutes(5),
+            Margin = new Padding(0, 0, 12, 12),
+            AccessibleName = "DBtoJSON scheduled run time"
+        };
+        _toolTip.SetToolTip(_dtDbToJsonScheduleAt, "Date and time used for one-time and daily DBtoJSON automation.");
+        grid.Controls.Add(_dtDbToJsonScheduleAt, 1, 1);
+
+        AddLabelCell(grid, "Every N minutes", 2);
+        _numDbToJsonScheduleIntervalMinutes = CreateCsvNumeric(1, 1440, 1, "Interval in minutes for recurring DBtoJSON preparation.");
+        _numDbToJsonScheduleIntervalMinutes.AccessibleName = "DBtoJSON automation interval minutes";
+        grid.Controls.Add(_numDbToJsonScheduleIntervalMinutes, 1, 2);
+
+        AddLabelCell(grid, "Timer target", 3);
+        _cmbDbToJsonScheduleTarget = new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Anchor = AnchorStyles.Left | AnchorStyles.Right,
+            Margin = new Padding(0, 0, 12, 12),
+            AccessibleName = "DBtoJSON automation target"
+        };
+        _cmbDbToJsonScheduleTarget.Items.AddRange(new object[]
+        {
+            "Generate Scenario 1",
+            "Generate Scenario 2",
+            "Prepare Scenario 3 Re-run State",
+            "Generate Scenarios 1 + 2"
+        });
+        _cmbDbToJsonScheduleTarget.SelectedIndex = 0;
+        _toolTip.SetToolTip(_cmbDbToJsonScheduleTarget, "Choose which DBtoJSON scenario setup the timer should generate.");
+        grid.Controls.Add(_cmbDbToJsonScheduleTarget, 1, 3);
+
+        content.Controls.Add(grid);
+
+        var actions = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            WrapContents = true,
+            Margin = new Padding(0, 8, 0, 0)
+        };
+        actions.Controls.Add(CreateActionButton("Arm Timer", (_, _) => ArmDbToJsonSchedule(), true));
+        actions.Controls.Add(CreateActionButton("Cancel Timer", (_, _) => CancelDbToJsonSchedule()));
+        actions.Controls.Add(CreateActionButton("Run Target Now", (_, _) => RunDbToJsonScheduledTarget()));
+        content.Controls.Add(actions);
+
+        _lblDbToJsonScheduleStatus = new Label
+        {
+            Text = "DBtoJSON scheduler idle. Choose a mode, then arm the timer.",
+            AutoSize = true,
+            MaximumSize = new Size(1020, 0),
+            ForeColor = MutedText,
+            Margin = new Padding(0, 8, 0, 0)
+        };
+        content.Controls.Add(_lblDbToJsonScheduleStatus);
+
+        content.Controls.Add(CreateInfoNote(
+            "Parallel run note",
+            "This timer prepares fresh DB export rows on a cadence while DataSyncer runs separately. The generator app seeds the source table; the actual JSON file creation or API send is still performed by DataSyncer.",
+            AccentSoft,
+            AccentColor));
+
+        _dbToJsonScheduleTimer.Tick -= OnDbToJsonScheduleTimerTick;
+        _dbToJsonScheduleTimer.Tick += OnDbToJsonScheduleTimerTick;
+
+        UpdateDbToJsonAutomationControlState();
+        return card;
+    }
+
     private Control CreateDbToJsonScenario1Card()
     {
         var card = CreateCard("Scenario 1 - File Export Happy Path", "Insert exportable rows flagged as new and stage the expected output folder for pre-state verification.", out var content);
@@ -366,12 +647,29 @@ public partial class Form1
 
         AddLabelCell(grid, "Output folder (pre-state)", 5);
         _txtDbToJsonOutputFolder = CreateCsvTextBox(@"D:\DataSyncerTest\JsonOutput", "Expected JSON output folder used for pre-state checks.");
-        _txtDbToJsonOutputFolder.ReadOnly = true;
         grid.Controls.Add(_txtDbToJsonOutputFolder, 1, 5);
-        grid.Controls.Add(CreateMiniButton("Open", (_, _) => OpenDbToJsonOutputFolder()), 2, 5);
+        var outputActions = CreateInlineActionPanel();
+        outputActions.Controls.Add(CreateMiniButton("Browse", (_, _) => BrowseForFolder(_txtDbToJsonOutputFolder, "Select the DBtoJSON output folder")));
+        outputActions.Controls.Add(CreateMiniButton("Open", (_, _) => OpenDbToJsonOutputFolder()));
+        outputActions.Controls.Add(CreateMiniButton("Prepare", (_, _) => PrepareDbToJsonOutputFolder()));
+        grid.Controls.Add(outputActions, 2, 5);
 
         content.Controls.Add(grid);
-        content.Controls.Add(CreateActionButton("Generate Scenario 1 Data", (_, _) => GenerateDbToJsonScenario1(), true));
+        var actions = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            WrapContents = true,
+            Margin = new Padding(0, 8, 0, 0)
+        };
+        actions.Controls.Add(CreateActionButton("Generate Scenario 1 Data", (_, _) => GenerateDbToJsonScenario1(), true));
+        actions.Controls.Add(CreateActionButton("Prepare Output Folder", (_, _) => PrepareDbToJsonOutputFolder()));
+        actions.Controls.Add(CreateActionButton("Open Output Folder", (_, _) => OpenDbToJsonOutputFolder()));
+        content.Controls.Add(actions);
+        content.Controls.Add(CreateInfoNote(
+            "Expected after job",
+            "Use this setup when DataSyncer is configured for folder output with JSONArray format. After the job runs, expect one JSON file in the configured folder, 5 exported records, processed source flags, and an updated state file.",
+            AccentSoft,
+            AccentColor));
         return card;
     }
 
@@ -419,12 +717,17 @@ public partial class Form1
 
         _lblDbToJsonPingStatus = CreateInlineStatusLabel("Endpoint has not been checked yet.");
         content.Controls.Add(_lblDbToJsonPingStatus);
+        content.Controls.Add(CreateInfoNote(
+            "Expected after job",
+            "Use this setup when DataSyncer is configured for API export. The API should receive the payload, success status should appear in logs, response-mapped columns should be written back to the source table, and flags should update only after the API call succeeds.",
+            AccentSoft,
+            AccentColor));
         return card;
     }
 
     private Control CreateDbToJsonScenario3Card()
     {
-        var card = CreateCard("Scenario 3 - No New Data Re-run", "Mark all export rows as processed and show the before/after count of rows still flagged as new.", out var content);
+        var card = CreateCard("Scenario 3 - No New Data Re-run", "Prepare the source table so a second DBtoJSON run sees zero new rows and does not create duplicate exports.", out var content);
 
         _lblDbToJsonReRunCounts = new Label
         {
@@ -443,15 +746,100 @@ public partial class Form1
             Margin = new Padding(0, 0, 0, 0)
         };
         actions.Controls.Add(CreateActionButton("Refresh Unprocessed Count", (_, _) => RefreshDbToJsonUnprocessedCount(), true));
+        actions.Controls.Add(CreateActionButton("Prepare Re-run State", (_, _) => PrepareDbToJsonScenario3()));
         actions.Controls.Add(CreateActionButton("Mark All Rows as Processed", (_, _) => MarkDbToJsonRowsProcessed()));
         content.Controls.Add(actions);
+        content.Controls.Add(CreateInfoNote(
+            "Expected after rerun",
+            "After DataSyncer has already exported the rows once, this setup helps validate that a second run finds zero new records, produces no extra JSON file or API send, and reports zero processed records in the latest state.",
+            WarningSoft,
+            WarningColor));
 
+        return card;
+    }
+
+    private Control CreateSqlQueryAutomationCard()
+    {
+        var card = CreateCard("SQLQuery Automation Timer", "Keep this application open and let it refresh SQLQuery prep on a schedule. Use Every N minutes when you want DataSyncer to keep finding fresh rows at fixed gaps.", out var content);
+        var grid = CreateCsvFormGrid();
+
+        AddLabelCell(grid, "Automation mode", 0);
+        _cmbSqlQueryScheduleMode = new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Anchor = AnchorStyles.Left | AnchorStyles.Right,
+            Margin = new Padding(0, 0, 12, 12),
+            AccessibleName = "SQLQuery automation mode"
+        };
+        _cmbSqlQueryScheduleMode.Items.AddRange(new object[]
+        {
+            "Run Once At Selected Time",
+            "Repeat Daily At Selected Time",
+            "Repeat Every N Minutes"
+        });
+        _cmbSqlQueryScheduleMode.SelectedIndex = 0;
+        _cmbSqlQueryScheduleMode.SelectedIndexChanged += (_, _) => UpdateSqlQueryAutomationControlState();
+        grid.Controls.Add(_cmbSqlQueryScheduleMode, 1, 0);
+
+        AddLabelCell(grid, "Run at", 1);
+        _dtSqlQueryScheduleAt = CreateDateTimeInput(DateTime.Now.AddMinutes(5), "Date and time used for one-time and daily SQLQuery preparation.");
+        grid.Controls.Add(_dtSqlQueryScheduleAt, 1, 1);
+
+        AddLabelCell(grid, "Every N minutes", 2);
+        _numSqlQueryScheduleIntervalMinutes = CreateCsvNumeric(1, 1440, 1, "Interval in minutes for recurring SQLQuery preparation.");
+        _numSqlQueryScheduleIntervalMinutes.AccessibleName = "SQLQuery automation interval minutes";
+        grid.Controls.Add(_numSqlQueryScheduleIntervalMinutes, 1, 2);
+
+        AddLabelCell(grid, "Timer target", 3);
+        _cmbSqlQueryScheduleTarget = new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Anchor = AnchorStyles.Left | AnchorStyles.Right,
+            Margin = new Padding(0, 0, 12, 12),
+            AccessibleName = "SQLQuery automation target"
+        };
+        _cmbSqlQueryScheduleTarget.Items.AddRange(new object[]
+        {
+            "Scenario 1 - Scheduled Update Data",
+            "Scenario 2 - Invalid SQL Sample",
+            "Scenario 3 - Broken Connection Sample",
+            "All SQLQuery Scenarios"
+        });
+        _cmbSqlQueryScheduleTarget.SelectedIndex = 0;
+        grid.Controls.Add(_cmbSqlQueryScheduleTarget, 1, 3);
+
+        content.Controls.Add(grid);
+
+        var actions = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            WrapContents = true,
+            Margin = new Padding(0, 8, 0, 0)
+        };
+        actions.Controls.Add(CreateActionButton("Arm Timer", (_, _) => ArmSqlQuerySchedule(), true));
+        actions.Controls.Add(CreateActionButton("Cancel Timer", (_, _) => CancelSqlQuerySchedule()));
+        actions.Controls.Add(CreateActionButton("Run Target Now", (_, _) => RunSqlQueryScheduledTarget()));
+        content.Controls.Add(actions);
+
+        _lblSqlQueryScheduleStatus = new Label
+        {
+            Text = "SQLQuery scheduler idle. Choose a mode, then arm the timer.",
+            AutoSize = true,
+            MaximumSize = new Size(1020, 0),
+            ForeColor = MutedText,
+            Margin = new Padding(0, 8, 0, 0)
+        };
+        content.Controls.Add(_lblSqlQueryScheduleStatus);
+
+        _sqlQueryScheduleTimer.Tick -= OnSqlQueryScheduleTimerTick;
+        _sqlQueryScheduleTimer.Tick += OnSqlQueryScheduleTimerTick;
+        UpdateSqlQueryAutomationControlState();
         return card;
     }
 
     private Control CreateSqlQueryScenario1Card()
     {
-        var card = CreateCard("SQLQuery Scenario 1 - Scheduled Update Query", "Create and populate the test table with PENDING and DONE rows while leaving UpdatedByJob and UpdatedAt null for verification.", out var content);
+        var card = CreateCard("SQLQuery Scenario 1 - Scheduled Update Query", "Create the test rows, keep the processed columns null, and generate a copy-ready UPDATE statement for DataSyncer.", out var content);
         var grid = CreateCsvFormGrid(includeActionColumn: true);
 
         AddLabelCell(grid, "Connection", 0);
@@ -462,32 +850,32 @@ public partial class Form1
 
         AddLabelCell(grid, "Test table name", 1);
         _txtSqlQueryTableName = CreateCsvTextBox("dbo.DS_SqlQuery_Test", "SQLQuery test table name.");
+        _txtSqlQueryTableName.TextChanged += (_, _) => RefreshSqlQueryScenarioTemplates();
         grid.Controls.Add(_txtSqlQueryTableName, 1, 1);
         grid.Controls.Add(new Panel { Width = 1, Height = 1 }, 2, 1);
 
         AddLabelCell(grid, "Total row count", 2);
         _numSqlQueryTotalRows = CreateCsvNumeric(1, 100, 8, "Total number of rows to seed.");
+        _numSqlQueryTotalRows.ValueChanged += (_, _) => RefreshSqlQueryScenarioTemplates();
         grid.Controls.Add(_numSqlQueryTotalRows, 1, 2);
         grid.Controls.Add(new Panel { Width = 1, Height = 1 }, 2, 2);
 
         AddLabelCell(grid, "PENDING row count", 3);
         _numSqlQueryPendingRows = CreateCsvNumeric(0, 100, 5, "Number of PENDING rows.");
+        _numSqlQueryPendingRows.ValueChanged += (_, _) => RefreshSqlQueryScenarioTemplates();
         grid.Controls.Add(_numSqlQueryPendingRows, 1, 3);
         grid.Controls.Add(new Panel { Width = 1, Height = 1 }, 2, 3);
 
         AddLabelCell(grid, "DONE row count", 4);
         _numSqlQueryDoneRows = CreateCsvNumeric(0, 100, 3, "Number of DONE rows.");
+        _numSqlQueryDoneRows.ValueChanged += (_, _) => RefreshSqlQueryScenarioTemplates();
         grid.Controls.Add(_numSqlQueryDoneRows, 1, 4);
         grid.Controls.Add(new Panel { Width = 1, Height = 1 }, 2, 4);
 
-        AddLabelCell(grid, "Schedule time label", 5);
-        var scheduleLabel = new Label
-        {
-            Text = "2026-04-06 16:00:00",
-            AutoSize = true,
-            Margin = new Padding(0, 8, 0, 12)
-        };
-        grid.Controls.Add(scheduleLabel, 1, 5);
+        AddLabelCell(grid, "Base event time", 5);
+        _dtSqlQueryEventTimeBase = CreateDateTimeInput(new DateTime(2026, 4, 6, 16, 0, 0), "Base EventTime used when seeding SQLQuery scenario rows.");
+        _dtSqlQueryEventTimeBase.ValueChanged += (_, _) => RefreshSqlQueryScenarioTemplates();
+        grid.Controls.Add(_dtSqlQueryEventTimeBase, 1, 5);
         grid.Controls.Add(new Panel { Width = 1, Height = 1 }, 2, 5);
 
         content.Controls.Add(grid);
@@ -500,8 +888,22 @@ public partial class Form1
         };
         actions.Controls.Add(CreateActionButton("Test Connection", (_, _) => TestSqlQueryConnection(), true));
         actions.Controls.Add(CreateActionButton("Create Table if Missing", (_, _) => CreateSqlQueryTableIfMissing()));
+        actions.Controls.Add(CreateActionButton("Refresh SQL Samples", (_, _) => RefreshSqlQueryScenarioTemplates()));
         actions.Controls.Add(CreateActionButton("Generate Scenario 1 Data", (_, _) => GenerateSqlQueryScenario1()));
         content.Controls.Add(actions);
+
+        _txtSqlQueryScenario1UpdateSql = new TextBox
+        {
+            Multiline = true,
+            ReadOnly = true,
+            Height = 92,
+            Dock = DockStyle.Top,
+            BorderStyle = BorderStyle.FixedSingle,
+            Margin = new Padding(0, 8, 0, 0),
+            BackColor = Color.FromArgb(248, 250, 252)
+        };
+        _toolTip.SetToolTip(_txtSqlQueryScenario1UpdateSql, "Suggested SQLQuery UPDATE statement for Scenario 1.");
+        content.Controls.Add(_txtSqlQueryScenario1UpdateSql);
 
         _lblSqlQueryStatus = new Label
         {
@@ -512,19 +914,165 @@ public partial class Form1
             Margin = new Padding(0, 8, 0, 0)
         };
         content.Controls.Add(_lblSqlQueryStatus);
+        content.Controls.Add(CreateInfoNote(
+            "Expected after job",
+            "Use the generated UPDATE sample with a near-future SQLQuery schedule. After DataSyncer runs, only the PENDING LINE-A rows in the prepared RowId range should update, and the service log row count should match the affected-row count in the table.",
+            AccentSoft,
+            AccentColor));
+        RefreshSqlQueryScenarioTemplates();
         return card;
     }
 
-    private Control CreateSqlQueryReminderCard(string title, string body, Color background, Color foreground)
+    private Control CreateSqlQueryScenario2Card()
     {
-        var card = CreateCard(title, "Reminder-only scenario. No seed data is required here.", out var content);
-        content.Controls.Add(CreateInfoNote("Reminder", body, background, foreground));
+        var card = CreateCard("SQLQuery Scenario 2 - Invalid SQL", "Generate a malformed statement you can paste into the DataSyncer job to verify clear error logging without silent success.", out var content);
+
+        var actions = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            WrapContents = true,
+            Margin = new Padding(0, 0, 0, 0)
+        };
+        actions.Controls.Add(CreateActionButton("Load Invalid SQL Sample", (_, _) => PrepareSqlQueryScenario2(), true));
+        content.Controls.Add(actions);
+
+        _txtSqlQueryScenario2InvalidSql = new TextBox
+        {
+            Multiline = true,
+            ReadOnly = true,
+            Height = 76,
+            Dock = DockStyle.Top,
+            BorderStyle = BorderStyle.FixedSingle,
+            Margin = new Padding(0, 8, 0, 0),
+            BackColor = Color.FromArgb(248, 250, 252)
+        };
+        _toolTip.SetToolTip(_txtSqlQueryScenario2InvalidSql, "Malformed SQL sample for the invalid SQL scenario.");
+        content.Controls.Add(_txtSqlQueryScenario2InvalidSql);
+        content.Controls.Add(CreateInfoNote(
+            "Expected result",
+            "DataSyncer should log the SQL parser or execution error clearly, avoid any silent success path, and keep the service running.",
+            WarningSoft,
+            WarningColor));
+        RefreshSqlQueryScenarioTemplates();
+        return card;
+    }
+
+    private Control CreateSqlQueryScenario3Card()
+    {
+        var card = CreateCard("SQLQuery Scenario 3 - Wrong Database Type or Connection", "Generate a broken SQL Server connection sample and a reminder to try an unsupported DB type path if the job supports provider selection.", out var content);
+
+        var actions = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            WrapContents = true,
+            Margin = new Padding(0, 0, 0, 0)
+        };
+        actions.Controls.Add(CreateActionButton("Generate Broken Connection Sample", (_, _) => PrepareSqlQueryScenario3(), true));
+        content.Controls.Add(actions);
+
+        _txtSqlQueryScenario3BrokenConnection = new TextBox
+        {
+            Multiline = true,
+            ReadOnly = true,
+            Height = 94,
+            Dock = DockStyle.Top,
+            BorderStyle = BorderStyle.FixedSingle,
+            Margin = new Padding(0, 8, 0, 0),
+            BackColor = Color.FromArgb(248, 250, 252)
+        };
+        _toolTip.SetToolTip(_txtSqlQueryScenario3BrokenConnection, "Broken connection example for the SQLQuery wrong-connection scenario.");
+        content.Controls.Add(_txtSqlQueryScenario3BrokenConnection);
+        content.Controls.Add(CreateInfoNote(
+            "Expected result",
+            "The SQLQuery job should fail gracefully, write a clear connection or provider error, and leave any unrelated DataSyncer jobs unaffected.",
+            DangerSoft,
+            DangerColor));
+        RefreshSqlQueryScenarioTemplates();
+        return card;
+    }
+
+    private Control CreateProgramAutomationCard()
+    {
+        var card = CreateCard("ProgramExecution Automation Timer", "Keep the script validation and output folders ready on a schedule. This is useful when DataSyncer will trigger program jobs repeatedly at fixed time gaps.", out var content);
+        var grid = CreateCsvFormGrid();
+
+        AddLabelCell(grid, "Automation mode", 0);
+        _cmbProgramScheduleMode = new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Anchor = AnchorStyles.Left | AnchorStyles.Right,
+            Margin = new Padding(0, 0, 12, 12),
+            AccessibleName = "ProgramExecution automation mode"
+        };
+        _cmbProgramScheduleMode.Items.AddRange(new object[]
+        {
+            "Run Once At Selected Time",
+            "Repeat Daily At Selected Time",
+            "Repeat Every N Minutes"
+        });
+        _cmbProgramScheduleMode.SelectedIndex = 0;
+        _cmbProgramScheduleMode.SelectedIndexChanged += (_, _) => UpdateProgramAutomationControlState();
+        grid.Controls.Add(_cmbProgramScheduleMode, 1, 0);
+
+        AddLabelCell(grid, "Run at", 1);
+        _dtProgramScheduleAt = CreateDateTimeInput(DateTime.Now.AddMinutes(5), "Date and time used for one-time and daily ProgramExecution preparation.");
+        grid.Controls.Add(_dtProgramScheduleAt, 1, 1);
+
+        AddLabelCell(grid, "Every N minutes", 2);
+        _numProgramScheduleIntervalMinutes = CreateCsvNumeric(1, 1440, 1, "Interval in minutes for recurring ProgramExecution preparation.");
+        _numProgramScheduleIntervalMinutes.AccessibleName = "ProgramExecution automation interval minutes";
+        grid.Controls.Add(_numProgramScheduleIntervalMinutes, 1, 2);
+
+        AddLabelCell(grid, "Timer target", 3);
+        _cmbProgramScheduleTarget = new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Anchor = AnchorStyles.Left | AnchorStyles.Right,
+            Margin = new Padding(0, 0, 12, 12),
+            AccessibleName = "ProgramExecution automation target"
+        };
+        _cmbProgramScheduleTarget.Items.AddRange(new object[]
+        {
+            "Scenario 1 - Successful Run Prep",
+            "Scenario 2 - Invalid Path Check",
+            "Scenario 3 - Argument Echo Prep",
+            "All ProgramExecution Scenarios"
+        });
+        _cmbProgramScheduleTarget.SelectedIndex = 0;
+        grid.Controls.Add(_cmbProgramScheduleTarget, 1, 3);
+
+        content.Controls.Add(grid);
+
+        var actions = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            WrapContents = true,
+            Margin = new Padding(0, 8, 0, 0)
+        };
+        actions.Controls.Add(CreateActionButton("Arm Timer", (_, _) => ArmProgramSchedule(), true));
+        actions.Controls.Add(CreateActionButton("Cancel Timer", (_, _) => CancelProgramSchedule()));
+        actions.Controls.Add(CreateActionButton("Run Target Now", (_, _) => RunProgramScheduledTarget()));
+        content.Controls.Add(actions);
+
+        _lblProgramScheduleStatus = new Label
+        {
+            Text = "ProgramExecution scheduler idle. Choose a mode, then arm the timer.",
+            AutoSize = true,
+            MaximumSize = new Size(1020, 0),
+            ForeColor = MutedText,
+            Margin = new Padding(0, 8, 0, 0)
+        };
+        content.Controls.Add(_lblProgramScheduleStatus);
+
+        _programScheduleTimer.Tick -= OnProgramScheduleTimerTick;
+        _programScheduleTimer.Tick += OnProgramScheduleTimerTick;
+        UpdateProgramAutomationControlState();
         return card;
     }
 
     private Control CreateProgramScenario1Card()
     {
-        var card = CreateCard("ProgramExecution Scenario 1 - Successful Executable Run", "Validate the expected script, create the output folder, and archive any prior output file before the DataSyncer job runs.", out var content);
+        var card = CreateCard("ProgramExecution Scenario 1 - Successful Executable Run", "Validate the expected script, create the output folder, archive any prior output file, and use a helper script that writes to stdout for log capture checks.", out var content);
         var grid = CreateCsvFormGrid();
 
         AddLabelCell(grid, "Script path", 0);
@@ -547,6 +1095,7 @@ public partial class Form1
             WrapContents = true,
             Margin = new Padding(0, 8, 0, 0)
         };
+        actions.Controls.Add(CreateActionButton("Prepare Scenario 1", (_, _) => PrepareProgramScenario1(), true));
         actions.Controls.Add(CreateActionButton("Create Output Folder", (_, _) => CreateProgramOutputFolder(_txtProgramS1OutputFile, UpdateProgramStatus), true));
         actions.Controls.Add(CreateActionButton("Validate Script Path", (_, _) => ValidateProgramScriptPath(_txtProgramS1ScriptPath, UpdateProgramStatus)));
         actions.Controls.Add(CreateActionButton("Archive Prior Output File", (_, _) => ArchiveProgramOutputFile(_txtProgramS1OutputFile, UpdateProgramStatus)));
@@ -561,6 +1110,11 @@ public partial class Form1
             Margin = new Padding(0, 8, 0, 0)
         };
         content.Controls.Add(_lblProgramS1Status);
+        content.Controls.Add(CreateInfoNote(
+            "Expected after job",
+            "The heartbeat helper writes the same line to stdout and the optional output file, so DataSyncer can validate process start, captured standard output, and clean completion logging in a single run.",
+            AccentSoft,
+            AccentColor));
         return card;
     }
 
@@ -585,16 +1139,21 @@ public partial class Form1
             Margin = new Padding(0, 8, 0, 0)
         };
         content.Controls.Add(_lblProgramS2Status);
+        content.Controls.Add(CreateInfoNote(
+            "Expected after job",
+            "Use this invalid path to confirm that DataSyncer logs the launch failure clearly, keeps the service stable, and does not report a silent success.",
+            WarningSoft,
+            WarningColor));
         return card;
     }
 
     private Control CreateProgramScenario3Card()
     {
-        var card = CreateCard("ProgramExecution Scenario 3 - Executable with Arguments", "Preview the full command line so QA can verify script path and quoted arguments before the job runs.", out var content);
+        var card = CreateCard("ProgramExecution Scenario 3 - Executable with Arguments", "Use a script that echoes the received arguments so DataSyncer logs can be compared directly with the configured command line.", out var content);
         var grid = CreateCsvFormGrid();
 
         AddLabelCell(grid, "Script path", 0);
-        _txtProgramS3ScriptPath = CreateCsvTextBox(@"TestResources\TwoDaySoak\program_execution_heartbeat.ps1", "Relative or absolute path to the test script.");
+        _txtProgramS3ScriptPath = CreateCsvTextBox(@"TestResources\TwoDaySoak\program_execution_echo_args.ps1", "Relative or absolute path to the argument-echo test script.");
         grid.Controls.Add(_txtProgramS3ScriptPath, 1, 0);
 
         AddLabelCell(grid, "OutputFile", 1);
@@ -613,8 +1172,10 @@ public partial class Form1
             WrapContents = true,
             Margin = new Padding(0, 8, 0, 0)
         };
+        actions.Controls.Add(CreateActionButton("Prepare Scenario 3", (_, _) => PrepareProgramScenario3(), true));
         actions.Controls.Add(CreateActionButton("Preview Full Command", (_, _) => PreviewProgramCommand(), true));
-        actions.Controls.Add(CreateActionButton("Create Output Folder", (_, _) => CreateProgramOutputFolder(_txtProgramS3OutputFile, UpdateProgramStatus)));
+        actions.Controls.Add(CreateActionButton("Validate Script Path", (_, _) => ValidateProgramScriptPath(_txtProgramS3ScriptPath, UpdateProgramScenario3Status)));
+        actions.Controls.Add(CreateActionButton("Create Output Folder", (_, _) => CreateProgramOutputFolder(_txtProgramS3OutputFile, UpdateProgramScenario3Status)));
         content.Controls.Add(actions);
 
         _txtProgramS3CommandPreview = new TextBox
@@ -629,6 +1190,20 @@ public partial class Form1
         };
         _toolTip.SetToolTip(_txtProgramS3CommandPreview, "Preview of the full command line.");
         content.Controls.Add(_txtProgramS3CommandPreview);
+        _lblProgramS3Status = new Label
+        {
+            Text = "Argument-echo scenario not prepared yet.",
+            AutoSize = true,
+            MaximumSize = new Size(1020, 0),
+            ForeColor = MutedText,
+            Margin = new Padding(0, 8, 0, 0)
+        };
+        content.Controls.Add(_lblProgramS3Status);
+        content.Controls.Add(CreateInfoNote(
+            "Expected after job",
+            "The argument-echo helper prints each received value, so DataSyncer logs can be checked directly against the configured command line and quoted arguments.",
+            AccentSoft,
+            AccentColor));
         return card;
     }
 
@@ -805,7 +1380,7 @@ public partial class Form1
         }
 
         var rows = new List<DbToDbSeedRow>();
-        var startId = Decimal.ToInt32(_numDbToDbS1SourceIdStart.Value);
+        var startId = Decimal.ToInt32(_numDbToDbS1SourceIdStart.Value) + GetDbToDbAutomationIdOffset();
         var count = Decimal.ToInt32(_numDbToDbS1RowCount.Value);
         for (var i = 0; i < count; i++)
         {
@@ -815,7 +1390,7 @@ public partial class Form1
                 _txtDbToDbS1WorkCenter.Text.Trim(),
                 _txtDbToDbS1SyncFlag.Text.Trim(),
                 _dtDbToDbS1EventTimeBase.Value.AddMinutes(i),
-                "Scenario1 Row " + (i + 1).ToString(CultureInfo.InvariantCulture)));
+                "Scenario1 Row " + (i + 1).ToString(CultureInfo.InvariantCulture) + GetDbToDbAutomationSuffix()));
         }
 
         try
@@ -825,15 +1400,27 @@ public partial class Form1
             EnsureDbToDbTablesExist(connection, sourceTable, destinationTable);
 
             using var transaction = connection.BeginTransaction();
+            var minId = rows.Min(row => row.SourceId);
+            var maxId = rows.Max(row => row.SourceId);
+            var deletedSourceRows = DeleteDbToDbRowsByIdRange(connection, transaction, sourceTable, minId, maxId);
+            var deletedDestinationRows = _chkDbToDbS1ClearDestination.Checked
+                ? ExecuteNonQueryCount(connection, transaction, "DELETE FROM " + destinationTable)
+                : DeleteDbToDbRowsByIdRange(connection, transaction, destinationTable, minId, maxId);
             if (_chkDbToDbS1ClearDestination.Checked)
             {
-                ExecuteNonQuery(connection, transaction, "DELETE FROM " + destinationTable);
+                _logService.LogInfo("DBtoDB Scenario 1 cleared all destination rows before seeding.");
             }
 
             InsertDbToDbRows(connection, transaction, sourceTable, rows, skipDuplicates: true);
             transaction.Commit();
 
-            SetDbToDbStatus("Scenario 1 prepared " + rows.Count + " source rows.", SuccessColor);
+            SetDbToDbStatus(
+                "Scenario 1 ready: source rows seeded=" + rows.Count +
+                ", replaced in source=" + deletedSourceRows +
+                ", destination rows cleared=" + deletedDestinationRows +
+                ". After the DBtoDB immediate job, expect " + rows.Count + " destination inserts and " + rows.Count + " source flag updates." +
+                GetDbToDbAutomationStatusSuffix(),
+                SuccessColor);
         }
         catch (Exception ex)
         {
@@ -862,15 +1449,16 @@ public partial class Form1
         }
 
         var sourceRows = new List<DbToDbSeedRow>();
+        var startId = 200011 + GetDbToDbAutomationIdOffset();
         for (var i = 0; i < 5; i++)
         {
             sourceRows.Add(new DbToDbSeedRow(
-                200011 + i,
+                startId + i,
                 "MC-0" + ((i % 5) + 1).ToString(CultureInfo.InvariantCulture),
                 "LINE-A",
                 _settings.SyncFlagNotProcessed,
                 new DateTime(2026, 4, 6, 11, 30, 0).AddMinutes(i),
-                "Scenario2 Fresh Row " + (i + 1).ToString(CultureInfo.InvariantCulture)));
+                "Scenario2 Fresh Row " + (i + 1).ToString(CultureInfo.InvariantCulture) + GetDbToDbAutomationSuffix()));
         }
 
         var staleCount = Decimal.ToInt32(_numDbToDbS2PreInsertCount.Value);
@@ -878,7 +1466,7 @@ public partial class Form1
             .Select((row, index) => row with
             {
                 SyncFlag = _settings.SyncFlagProcessed,
-                Notes = "Scenario2 Stale Row " + (index + 1).ToString(CultureInfo.InvariantCulture)
+                Notes = "Scenario2 Stale Row " + (index + 1).ToString(CultureInfo.InvariantCulture) + GetDbToDbAutomationSuffix()
             })
             .ToList();
 
@@ -889,6 +1477,10 @@ public partial class Form1
             EnsureDbToDbTablesExist(connection, sourceTable, destinationTable);
 
             using var transaction = connection.BeginTransaction();
+            var minId = sourceRows.Min(row => row.SourceId);
+            var maxId = sourceRows.Max(row => row.SourceId);
+            var deletedSourceRows = DeleteDbToDbRowsByIdRange(connection, transaction, sourceTable, minId, maxId);
+            var deletedDestinationRows = DeleteDbToDbRowsByIdRange(connection, transaction, destinationTable, minId, maxId);
             InsertDbToDbRows(connection, transaction, sourceTable, sourceRows, skipDuplicates: true);
             if (staleRows.Count > 0)
             {
@@ -899,7 +1491,13 @@ public partial class Form1
 
             UpdateDbToDbConflictNote();
             SetDbToDbStatus(
-                "Scenario 2 prepared 5 source rows and " + staleRows.Count + " stale destination rows. Conflict mode reminder: " + _cmbDbToDbS2ConflictBehavior.SelectedItem,
+                "Scenario 2 ready: source rows seeded=" + sourceRows.Count +
+                ", duplicate destination rows seeded=" + staleRows.Count +
+                ", replaced in source=" + deletedSourceRows +
+                ", cleared from destination=" + deletedDestinationRows +
+                ". Conflict mode reminder: " + _cmbDbToDbS2ConflictBehavior.SelectedItem +
+                ". After the job, duplicates should be handled safely and source flags should follow the configured path." +
+                GetDbToDbAutomationStatusSuffix(),
                 SuccessColor);
         }
         catch (Exception ex)
@@ -939,16 +1537,18 @@ public partial class Form1
             return;
         }
 
+        UpdateDbToDbScenario3Progress(5, "Scenario 3: preparing source and destination setup...", AccentColor);
+
         var rows = new List<DbToDbSeedRow>();
-        var currentId = 200016;
+        var currentId = 200016 + GetDbToDbAutomationIdOffset();
         for (var i = 0; i < Decimal.ToInt32(_numDbToDbS3InsideRangeCount.Value); i++)
         {
-            rows.Add(new DbToDbSeedRow(currentId++, "MC-0" + ((i % 5) + 1), workCenters[0], _settings.SyncFlagNotProcessed, _dtDbToDbS3InsideDate.Value.AddMinutes(i), "Inside range"));
+            rows.Add(new DbToDbSeedRow(currentId++, "MC-0" + ((i % 5) + 1), workCenters[0], _settings.SyncFlagNotProcessed, _dtDbToDbS3InsideDate.Value.AddMinutes(i), "Inside range" + GetDbToDbAutomationSuffix()));
         }
 
         for (var i = 0; i < Decimal.ToInt32(_numDbToDbS3OutsideRangeCount.Value); i++)
         {
-            rows.Add(new DbToDbSeedRow(currentId++, "MC-0" + ((i % 5) + 1), workCenters[0], _settings.SyncFlagNotProcessed, _dtDbToDbS3OutsideDate.Value.AddMinutes(i), "Outside range"));
+            rows.Add(new DbToDbSeedRow(currentId++, "MC-0" + ((i % 5) + 1), workCenters[0], _settings.SyncFlagNotProcessed, _dtDbToDbS3OutsideDate.Value.AddMinutes(i), "Outside range" + GetDbToDbAutomationSuffix()));
         }
 
         for (var i = 0; i < 5; i++)
@@ -956,14 +1556,22 @@ public partial class Form1
             var workCenter = workCenters[Math.Min(i % workCenters.Count, workCenters.Count - 1)];
             var syncFlag = i == 4 ? _settings.SyncFlagProcessed : _settings.SyncFlagNotProcessed;
             var eventTime = i < 3 ? _dtDbToDbS3InsideDate.Value.AddHours(1).AddMinutes(i) : _dtDbToDbS3OutsideDate.Value.AddHours(1).AddMinutes(i);
-            rows.Add(new DbToDbSeedRow(currentId++, "MC-MIX-" + (i + 1).ToString(CultureInfo.InvariantCulture), workCenter, syncFlag, eventTime, "Mixed condition"));
+            rows.Add(new DbToDbSeedRow(currentId++, "MC-MIX-" + (i + 1).ToString(CultureInfo.InvariantCulture), workCenter, syncFlag, eventTime, "Mixed condition" + GetDbToDbAutomationSuffix()));
         }
 
-        var staleRows = rows.Take(Math.Min(5, rows.Count))
+        UpdateDbToDbScenario3Progress(20, "Scenario 3: built inside-range, outside-range, and mixed-condition rows.", AccentColor);
+
+        var insideRangeAnchor = _dtDbToDbS3InsideDate.Value;
+        var staleRows = rows
+            .Where(row =>
+                row.EventTime >= insideRangeAnchor &&
+                row.EventTime < insideRangeAnchor.AddHours(12) &&
+                string.Equals(row.WorkCenter, workCenters[0], StringComparison.OrdinalIgnoreCase))
+            .Take(Math.Min(5, rows.Count))
             .Select((row, index) => row with
             {
                 SyncFlag = _settings.SyncFlagProcessed,
-                Notes = "Scenario3 Stale Destination " + (index + 1).ToString(CultureInfo.InvariantCulture)
+                Notes = "Scenario3 Stale Destination " + (index + 1).ToString(CultureInfo.InvariantCulture) + GetDbToDbAutomationSuffix()
             })
             .ToList();
 
@@ -972,25 +1580,356 @@ public partial class Form1
             using var connection = new SqlConnection(connectionString);
             connection.Open();
             EnsureDbToDbTablesExist(connection, sourceTable, destinationTable);
+            UpdateDbToDbScenario3Progress(35, "Scenario 3: verified source and destination tables.", AccentColor);
 
             using var transaction = connection.BeginTransaction();
+            var minId = rows.Min(row => row.SourceId);
+            var maxId = rows.Max(row => row.SourceId);
+            var deletedSourceRows = DeleteDbToDbRowsByIdRange(connection, transaction, sourceTable, minId, maxId);
+            var deletedDestinationRows = DeleteDbToDbRowsByIdRange(connection, transaction, destinationTable, minId, maxId);
+            UpdateDbToDbScenario3Progress(60, "Scenario 3: cleared prior rows from the same ID window.", AccentColor);
+
             InsertDbToDbRows(connection, transaction, sourceTable, rows, skipDuplicates: true);
+            UpdateDbToDbScenario3Progress(80, "Scenario 3: inserted filtered source data.", AccentColor);
             if (_chkDbToDbS3PreloadDestination.Checked)
             {
                 InsertDbToDbRows(connection, transaction, destinationTable, staleRows, skipDuplicates: true);
+                UpdateDbToDbScenario3Progress(95, "Scenario 3: preloaded matching stale destination rows for delete-and-reinsert validation.", AccentColor);
+            }
+            else
+            {
+                UpdateDbToDbScenario3Progress(95, "Scenario 3: destination preload skipped; source-only setup is ready.", AccentColor);
             }
 
             transaction.Commit();
+            UpdateDbToDbScenario3Progress(100, "Scenario 3 setup completed.", SuccessColor);
 
             SetDbToDbStatus(
-                "Scenario 3 prepared " + rows.Count + " source rows" +
-                (_chkDbToDbS3PreloadDestination.Checked ? " and " + staleRows.Count + " stale destination rows." : "."),
+                "Scenario 3 ready: source rows seeded=" + rows.Count +
+                ", replaced in source=" + deletedSourceRows +
+                ", cleared from destination=" + deletedDestinationRows +
+                (_chkDbToDbS3PreloadDestination.Checked
+                    ? ", stale destination rows seeded=" + staleRows.Count + "."
+                    : ", destination preload skipped.") +
+                " Use the selected inside-range date and first WorkCenter filter value as the manual copy slice. Progress updates are shown in this card while setup runs." +
+                GetDbToDbAutomationStatusSuffix(),
                 SuccessColor);
         }
         catch (Exception ex)
         {
+            UpdateDbToDbScenario3Progress(0, "Scenario 3 progress reset after an error.", DangerColor);
             HandleDbActionError("DBtoDB", ex);
         }
+    }
+
+    private void OnDbToDbScheduleTimerTick(object? sender, EventArgs e)
+    {
+        HandleDbToDbScheduleTick();
+    }
+
+    private void ArmDbToDbSchedule()
+    {
+        if (_dtDbToDbScheduleAt is null ||
+            _cmbDbToDbScheduleMode is null ||
+            _numDbToDbScheduleIntervalMinutes is null ||
+            _cmbDbToDbScheduleTarget is null)
+        {
+            return;
+        }
+
+        var mode = GetSelectedDbToDbScheduleMode();
+        var scheduledAt = mode switch
+        {
+            DbToDbScheduleMode.Daily => ResolveNextDbToDbScheduledRun(_dtDbToDbScheduleAt.Value),
+            DbToDbScheduleMode.EveryNMinutes => DateTime.Now.AddMinutes(decimal.ToDouble(_numDbToDbScheduleIntervalMinutes.Value)),
+            _ => _dtDbToDbScheduleAt.Value
+        };
+
+        if (mode == DbToDbScheduleMode.OneTime && scheduledAt <= DateTime.Now)
+        {
+            MessageBox.Show(
+                "Pick a future time for the DBtoDB scheduler, or switch to a recurring mode to let the app calculate the next run automatically.",
+                "DBtoDB Scheduler",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            return;
+        }
+
+        _armedDbToDbScheduleMode = mode;
+        _dbToDbScheduleInterval = mode == DbToDbScheduleMode.EveryNMinutes
+            ? TimeSpan.FromMinutes(decimal.ToDouble(_numDbToDbScheduleIntervalMinutes.Value))
+            : null;
+        _dbToDbScheduledRunAt = scheduledAt;
+        _dbToDbScheduleTimer.Start();
+        UpdateDbToDbScheduleStatus();
+
+        _logService.LogInfo(
+            "DBtoDB scheduler armed for " +
+            scheduledAt.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) +
+            " | " + GetDbToDbScheduleTargetLabel() +
+            " | " + GetArmedDbToDbScheduleModeLabel());
+        RefreshLogViewer();
+        WriteStatus("DBtoDB scheduler armed");
+    }
+
+    private void CancelDbToDbSchedule()
+    {
+        _dbToDbScheduleTimer.Stop();
+        _dbToDbScheduledRunAt = null;
+        _dbToDbScheduleInterval = null;
+        _armedDbToDbScheduleMode = DbToDbScheduleMode.OneTime;
+        UpdateDbToDbScheduleStatus();
+        _logService.LogInfo("DBtoDB scheduler canceled");
+        RefreshLogViewer();
+        WriteStatus("DBtoDB scheduler canceled");
+    }
+
+    private void HandleDbToDbScheduleTick()
+    {
+        if (!_dbToDbScheduledRunAt.HasValue)
+        {
+            _dbToDbScheduleTimer.Stop();
+            UpdateDbToDbScheduleStatus();
+            return;
+        }
+
+        if (DateTime.Now < _dbToDbScheduledRunAt.Value)
+        {
+            UpdateDbToDbScheduleStatus();
+            return;
+        }
+
+        RunDbToDbScheduledTarget();
+
+        if (_armedDbToDbScheduleMode == DbToDbScheduleMode.Daily)
+        {
+            _dbToDbScheduledRunAt = ResolveNextDbToDbScheduledRun(_dbToDbScheduledRunAt.Value.AddDays(1));
+            _dbToDbScheduleTimer.Start();
+        }
+        else if (_armedDbToDbScheduleMode == DbToDbScheduleMode.EveryNMinutes && _dbToDbScheduleInterval.HasValue)
+        {
+            _dbToDbScheduledRunAt = ResolveNextDbToDbRecurringRun(_dbToDbScheduledRunAt.Value, _dbToDbScheduleInterval.Value);
+            _dbToDbScheduleTimer.Start();
+        }
+        else
+        {
+            _dbToDbScheduleTimer.Stop();
+            _dbToDbScheduledRunAt = null;
+            _dbToDbScheduleInterval = null;
+        }
+
+        UpdateDbToDbScheduleStatus();
+    }
+
+    private void RunDbToDbScheduledTarget()
+    {
+        _dbToDbAutomationExecutionContext = CreateDbToDbAutomationExecutionContext();
+        try
+        {
+            var targetLabel = GetDbToDbScheduleTargetLabel();
+            switch (_cmbDbToDbScheduleTarget?.SelectedIndex)
+            {
+                case 1:
+                    GenerateDbToDbScenario2();
+                    break;
+                case 2:
+                    GenerateDbToDbScenario3();
+                    break;
+                case 3:
+                    GenerateDbToDbScenario1();
+                    GenerateDbToDbScenario2();
+                    GenerateDbToDbScenario3();
+                    break;
+                default:
+                    GenerateDbToDbScenario1();
+                    break;
+            }
+
+            _logService.LogSuccess("DBtoDB scheduler executed: " + targetLabel);
+            RefreshLogViewer();
+            WriteStatus("DBtoDB scheduler executed");
+        }
+        catch (Exception ex)
+        {
+            _logService.LogError("DBtoDB scheduler failed: " + ex.Message);
+            RefreshLogViewer();
+            WriteStatus("DBtoDB scheduler failed");
+
+            MessageBox.Show(
+                "Scheduled DBtoDB generation failed." + Environment.NewLine + Environment.NewLine + ex.Message,
+                "DBtoDB Scheduler",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
+        finally
+        {
+            _dbToDbAutomationExecutionContext = null;
+        }
+    }
+
+    private void UpdateDbToDbScheduleStatus()
+    {
+        if (_lblDbToDbScheduleStatus is null)
+        {
+            return;
+        }
+
+        if (!_dbToDbScheduledRunAt.HasValue)
+        {
+            _lblDbToDbScheduleStatus.Text = "DBtoDB scheduler idle. Choose a mode, then arm the timer.";
+            _lblDbToDbScheduleStatus.ForeColor = MutedText;
+            return;
+        }
+
+        var remaining = _dbToDbScheduledRunAt.Value - DateTime.Now;
+        if (remaining < TimeSpan.Zero)
+        {
+            remaining = TimeSpan.Zero;
+        }
+
+        _lblDbToDbScheduleStatus.Text =
+            "Armed for " + _dbToDbScheduledRunAt.Value.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) +
+            " | " + GetDbToDbScheduleTargetLabel() +
+            " | " + GetArmedDbToDbScheduleModeLabel() +
+            Environment.NewLine +
+            "Time remaining: " + remaining.ToString(@"dd\.hh\:mm\:ss", CultureInfo.InvariantCulture);
+        _lblDbToDbScheduleStatus.ForeColor = AccentColor;
+    }
+
+    private void UpdateDbToDbAutomationControlState()
+    {
+        var mode = GetSelectedDbToDbScheduleMode();
+        if (_dtDbToDbScheduleAt is not null)
+        {
+            _dtDbToDbScheduleAt.Enabled = mode != DbToDbScheduleMode.EveryNMinutes;
+        }
+
+        if (_numDbToDbScheduleIntervalMinutes is not null)
+        {
+            _numDbToDbScheduleIntervalMinutes.Enabled = mode == DbToDbScheduleMode.EveryNMinutes;
+        }
+    }
+
+    private DbToDbScheduleMode GetSelectedDbToDbScheduleMode()
+    {
+        return _cmbDbToDbScheduleMode?.SelectedIndex switch
+        {
+            1 => DbToDbScheduleMode.Daily,
+            2 => DbToDbScheduleMode.EveryNMinutes,
+            _ => DbToDbScheduleMode.OneTime
+        };
+    }
+
+    private string GetDbToDbScheduleTargetLabel()
+    {
+        return _cmbDbToDbScheduleTarget?.SelectedIndex switch
+        {
+            1 => "Generate Scenario 2",
+            2 => "Generate Scenario 3",
+            3 => "Generate All DBtoDB Scenarios",
+            _ => "Generate Scenario 1"
+        };
+    }
+
+    private string GetArmedDbToDbScheduleModeLabel()
+    {
+        return _armedDbToDbScheduleMode switch
+        {
+            DbToDbScheduleMode.Daily => "repeats daily",
+            DbToDbScheduleMode.EveryNMinutes when _dbToDbScheduleInterval.HasValue =>
+                "every " + FormatDbToDbIntervalLabel(_dbToDbScheduleInterval.Value),
+            _ => "one-time"
+        };
+    }
+
+    private static DateTime ResolveNextDbToDbScheduledRun(DateTime requestedTime)
+    {
+        while (requestedTime <= DateTime.Now)
+        {
+            requestedTime = requestedTime.AddDays(1);
+        }
+
+        return requestedTime;
+    }
+
+    private static DateTime ResolveNextDbToDbRecurringRun(DateTime previousScheduledAt, TimeSpan interval)
+    {
+        if (interval <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(interval), "Recurring DBtoDB interval must be greater than zero.");
+        }
+
+        var nextRun = previousScheduledAt.Add(interval);
+        while (nextRun <= DateTime.Now)
+        {
+            nextRun = nextRun.Add(interval);
+        }
+
+        return nextRun;
+    }
+
+    private DbToDbAutomationExecutionContext CreateDbToDbAutomationExecutionContext()
+    {
+        _dbToDbAutomationRunSequence++;
+        if (_dbToDbAutomationRunSequence <= 0)
+        {
+            _dbToDbAutomationRunSequence = 1;
+        }
+
+        return new DbToDbAutomationExecutionContext(DateTime.Now, _dbToDbAutomationRunSequence);
+    }
+
+    private static string FormatDbToDbIntervalLabel(TimeSpan interval)
+    {
+        var totalMinutes = Math.Max(1, (int)Math.Round(interval.TotalMinutes, MidpointRounding.AwayFromZero));
+        return totalMinutes.ToString(CultureInfo.InvariantCulture) + (totalMinutes == 1 ? " minute" : " minutes");
+    }
+
+    private void UpdateDbToDbScenario3Progress(int value, string message, Color color)
+    {
+        if (_progressDbToDbScenario3 is not null)
+        {
+            _progressDbToDbScenario3.Value = Math.Max(_progressDbToDbScenario3.Minimum, Math.Min(_progressDbToDbScenario3.Maximum, value));
+        }
+
+        if (_lblDbToDbScenario3Progress is not null)
+        {
+            _lblDbToDbScenario3Progress.Text = message;
+            _lblDbToDbScenario3Progress.ForeColor = color;
+        }
+
+        Application.DoEvents();
+    }
+
+    private int GetDbToDbAutomationIdOffset()
+    {
+        return _dbToDbAutomationExecutionContext is null
+            ? 0
+            : _dbToDbAutomationExecutionContext.RunSequence * 1000;
+    }
+
+    private string GetDbToDbAutomationSuffix()
+    {
+        if (_dbToDbAutomationExecutionContext is null)
+        {
+            return string.Empty;
+        }
+
+        return " | batch " +
+               _dbToDbAutomationExecutionContext.RunStamp.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture) +
+               "_r" +
+               _dbToDbAutomationExecutionContext.RunSequence.ToString("D3", CultureInfo.InvariantCulture);
+    }
+
+    private string GetDbToDbAutomationStatusSuffix()
+    {
+        return _dbToDbAutomationExecutionContext is null
+            ? string.Empty
+            : " Generated by scheduler batch " +
+              _dbToDbAutomationExecutionContext.RunStamp.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture) +
+              "_r" +
+              _dbToDbAutomationExecutionContext.RunSequence.ToString("D3", CultureInfo.InvariantCulture) +
+              ".";
     }
 
     private void GenerateDbToJsonScenario1()
@@ -1025,17 +1964,25 @@ public partial class Form1
             return;
         }
 
-        var rows = new List<DbToJsonSeedRow>();
-        var startId = _settings.DbToJsonIdStart;
-        for (var i = 0; i < Decimal.ToInt32(_numDbToJsonS1RowCount.Value); i++)
+        if (EnsureDbToJsonOutputFolder() is null)
         {
+            return;
+        }
+
+        var rows = new List<DbToJsonSeedRow>();
+        var startId = _settings.DbToJsonIdStart + GetDbToJsonAutomationIdOffset();
+        var baseTime = GetDbToJsonScenario1BaseTime();
+        var rowCount = Decimal.ToInt32(_numDbToJsonS1RowCount.Value);
+        for (var i = 0; i < rowCount; i++)
+        {
+            var exportId = startId + i;
             rows.Add(new DbToJsonSeedRow(
-                startId + i,
+                exportId,
                 _txtDbToJsonS1ExportFlag.Text.Trim(),
                 deviceCodes[i % deviceCodes.Count],
                 resultCodes[i % resultCodes.Count],
-                _dtDbToJsonS1CreatedAtBase.Value.AddMinutes(i),
-                "{\"id\":" + (startId + i).ToString(CultureInfo.InvariantCulture) + "}",
+                baseTime.AddMinutes(i),
+                BuildDbToJsonPayload(exportId, false),
                 string.Empty,
                 string.Empty,
                 string.Empty,
@@ -1050,10 +1997,17 @@ public partial class Form1
             EnsureDbToJsonTableExists(connection, sourceTable);
 
             using var transaction = connection.BeginTransaction();
+            var deletedRows = DeleteDbToJsonRowsByIdRange(connection, transaction, sourceTable, startId, startId + rowCount - 1);
             InsertDbToJsonRows(connection, transaction, sourceTable, rows, skipDuplicates: true);
             transaction.Commit();
 
-            SetDbToJsonStatus("Scenario 1 prepared " + rows.Count + " export rows.", SuccessColor);
+            SetDbToJsonStatus(
+                "Scenario 1 ready: export rows seeded=" + rows.Count +
+                ", replaced in source=" + deletedRows +
+                ". After the DBtoJSON folder export job runs, expect one JSON file in " + GetDbToJsonOutputFolderDisplay() +
+                ", " + rows.Count + " exported rows, processed flags, and an updated state file." +
+                GetDbToJsonAutomationStatusSuffix(),
+                SuccessColor);
         }
         catch (Exception ex)
         {
@@ -1086,17 +2040,22 @@ public partial class Form1
             return;
         }
 
+        PingDbToJsonEndpoint();
+
         var rows = new List<DbToJsonSeedRow>();
-        var startId = _settings.DbToJsonIdStart + 100;
-        for (var i = 0; i < Decimal.ToInt32(_numDbToJsonS2RowCount.Value); i++)
+        var startId = _settings.DbToJsonIdStart + 100 + GetDbToJsonAutomationIdOffset();
+        var baseTime = GetDbToJsonScenario2BaseTime();
+        var rowCount = Decimal.ToInt32(_numDbToJsonS2RowCount.Value);
+        for (var i = 0; i < rowCount; i++)
         {
+            var exportId = startId + i;
             rows.Add(new DbToJsonSeedRow(
-                startId + i,
+                exportId,
                 _settings.SyncFlagNotProcessed,
                 "DEV-0" + ((i % 2) + 1).ToString(CultureInfo.InvariantCulture),
                 i % 2 == 0 ? "READY" : "PASS",
-                new DateTime(2026, 4, 6, 14, 30, 0).AddMinutes(i),
-                "{\"api\":true}",
+                baseTime.AddMinutes(i),
+                BuildDbToJsonPayload(exportId, true),
                 _txtDbToJsonS2CrtfcKey.Text.Trim(),
                 _txtDbToJsonS2UseSe.Text.Trim(),
                 _txtDbToJsonS2SysUser.Text.Trim(),
@@ -1109,17 +2068,297 @@ public partial class Form1
             using var connection = new SqlConnection(connectionString);
             connection.Open();
             EnsureDbToJsonTableExists(connection, sourceTable);
+            ExecuteNonQuery(connection, BuildDbToJsonResponseColumnsSql(sourceTable));
 
             using var transaction = connection.BeginTransaction();
+            var deletedRows = DeleteDbToJsonRowsByIdRange(connection, transaction, sourceTable, startId, startId + rowCount - 1);
             InsertDbToJsonRows(connection, transaction, sourceTable, rows, skipDuplicates: true);
             transaction.Commit();
 
-            SetDbToJsonStatus("Scenario 2 prepared " + rows.Count + " API export rows.", SuccessColor);
+            SetDbToJsonStatus(
+                "Scenario 2 ready: API export rows seeded=" + rows.Count +
+                ", replaced in source=" + deletedRows +
+                ". Response-writeback columns were verified automatically. After the DBtoJSON API job runs, expect API success logs, mapped response values written to the source table, and processed flags updated only after API completion." +
+                GetDbToJsonAutomationStatusSuffix(),
+                SuccessColor);
         }
         catch (Exception ex)
         {
             HandleDbActionError("DBtoJSON", ex);
         }
+    }
+
+    private void PrepareDbToJsonScenario3()
+    {
+        MarkDbToJsonRowsProcessed();
+        RefreshDbToJsonUnprocessedCount();
+
+        SetDbToJsonStatus(
+            "Scenario 3 ready: all DBtoJSON rows are marked processed so the next DataSyncer run should report no new records and produce no extra JSON file or API send." +
+            GetDbToJsonAutomationStatusSuffix(),
+            SuccessColor);
+    }
+
+    private void OnDbToJsonScheduleTimerTick(object? sender, EventArgs e)
+    {
+        HandleDbToJsonScheduleTick();
+    }
+
+    private void ArmDbToJsonSchedule()
+    {
+        if (_dtDbToJsonScheduleAt is null ||
+            _cmbDbToJsonScheduleMode is null ||
+            _numDbToJsonScheduleIntervalMinutes is null ||
+            _cmbDbToJsonScheduleTarget is null)
+        {
+            return;
+        }
+
+        var mode = GetSelectedDbToJsonScheduleMode();
+        var scheduledAt = mode switch
+        {
+            DbToJsonScheduleMode.Daily => ResolveNextDbToJsonScheduledRun(_dtDbToJsonScheduleAt.Value),
+            DbToJsonScheduleMode.EveryNMinutes => DateTime.Now.AddMinutes(decimal.ToDouble(_numDbToJsonScheduleIntervalMinutes.Value)),
+            _ => _dtDbToJsonScheduleAt.Value
+        };
+
+        if (mode == DbToJsonScheduleMode.OneTime && scheduledAt <= DateTime.Now)
+        {
+            MessageBox.Show(
+                "Pick a future time for the DBtoJSON scheduler, or switch to a recurring mode to let the app calculate the next run automatically.",
+                "DBtoJSON Scheduler",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            return;
+        }
+
+        _armedDbToJsonScheduleMode = mode;
+        _dbToJsonScheduleInterval = mode == DbToJsonScheduleMode.EveryNMinutes
+            ? TimeSpan.FromMinutes(decimal.ToDouble(_numDbToJsonScheduleIntervalMinutes.Value))
+            : null;
+        _dbToJsonScheduledRunAt = scheduledAt;
+        _dbToJsonScheduleTimer.Start();
+        UpdateDbToJsonScheduleStatus();
+
+        _logService.LogInfo(
+            "DBtoJSON scheduler armed for " +
+            scheduledAt.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) +
+            " | " + GetDbToJsonScheduleTargetLabel() +
+            " | " + GetArmedDbToJsonScheduleModeLabel());
+        RefreshLogViewer();
+        WriteStatus("DBtoJSON scheduler armed");
+    }
+
+    private void CancelDbToJsonSchedule()
+    {
+        _dbToJsonScheduleTimer.Stop();
+        _dbToJsonScheduledRunAt = null;
+        _dbToJsonScheduleInterval = null;
+        _armedDbToJsonScheduleMode = DbToJsonScheduleMode.OneTime;
+        UpdateDbToJsonScheduleStatus();
+        _logService.LogInfo("DBtoJSON scheduler canceled");
+        RefreshLogViewer();
+        WriteStatus("DBtoJSON scheduler canceled");
+    }
+
+    private void HandleDbToJsonScheduleTick()
+    {
+        if (!_dbToJsonScheduledRunAt.HasValue)
+        {
+            _dbToJsonScheduleTimer.Stop();
+            UpdateDbToJsonScheduleStatus();
+            return;
+        }
+
+        if (DateTime.Now < _dbToJsonScheduledRunAt.Value)
+        {
+            UpdateDbToJsonScheduleStatus();
+            return;
+        }
+
+        RunDbToJsonScheduledTarget();
+
+        if (_armedDbToJsonScheduleMode == DbToJsonScheduleMode.Daily)
+        {
+            _dbToJsonScheduledRunAt = ResolveNextDbToJsonScheduledRun(_dbToJsonScheduledRunAt.Value.AddDays(1));
+            _dbToJsonScheduleTimer.Start();
+        }
+        else if (_armedDbToJsonScheduleMode == DbToJsonScheduleMode.EveryNMinutes && _dbToJsonScheduleInterval.HasValue)
+        {
+            _dbToJsonScheduledRunAt = ResolveNextDbToJsonRecurringRun(_dbToJsonScheduledRunAt.Value, _dbToJsonScheduleInterval.Value);
+            _dbToJsonScheduleTimer.Start();
+        }
+        else
+        {
+            _dbToJsonScheduleTimer.Stop();
+            _dbToJsonScheduledRunAt = null;
+            _dbToJsonScheduleInterval = null;
+        }
+
+        UpdateDbToJsonScheduleStatus();
+    }
+
+    private void RunDbToJsonScheduledTarget()
+    {
+        _dbToJsonAutomationExecutionContext = CreateDbToJsonAutomationExecutionContext();
+        try
+        {
+            var targetLabel = GetDbToJsonScheduleTargetLabel();
+            switch (_cmbDbToJsonScheduleTarget?.SelectedIndex)
+            {
+                case 1:
+                    GenerateDbToJsonScenario2();
+                    break;
+                case 2:
+                    PrepareDbToJsonScenario3();
+                    break;
+                case 3:
+                    GenerateDbToJsonScenario1();
+                    GenerateDbToJsonScenario2();
+                    break;
+                default:
+                    GenerateDbToJsonScenario1();
+                    break;
+            }
+
+            _logService.LogSuccess("DBtoJSON scheduler executed: " + targetLabel);
+            RefreshLogViewer();
+            WriteStatus("DBtoJSON scheduler executed");
+        }
+        catch (Exception ex)
+        {
+            _logService.LogError("DBtoJSON scheduler failed: " + ex.Message);
+            RefreshLogViewer();
+            WriteStatus("DBtoJSON scheduler failed");
+
+            MessageBox.Show(
+                "Scheduled DBtoJSON generation failed." + Environment.NewLine + Environment.NewLine + ex.Message,
+                "DBtoJSON Scheduler",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
+        finally
+        {
+            _dbToJsonAutomationExecutionContext = null;
+        }
+    }
+
+    private void UpdateDbToJsonScheduleStatus()
+    {
+        if (_lblDbToJsonScheduleStatus is null)
+        {
+            return;
+        }
+
+        if (!_dbToJsonScheduledRunAt.HasValue)
+        {
+            _lblDbToJsonScheduleStatus.Text = "DBtoJSON scheduler idle. Choose a mode, then arm the timer.";
+            _lblDbToJsonScheduleStatus.ForeColor = MutedText;
+            return;
+        }
+
+        var remaining = _dbToJsonScheduledRunAt.Value - DateTime.Now;
+        if (remaining < TimeSpan.Zero)
+        {
+            remaining = TimeSpan.Zero;
+        }
+
+        _lblDbToJsonScheduleStatus.Text =
+            "Armed for " + _dbToJsonScheduledRunAt.Value.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) +
+            " | " + GetDbToJsonScheduleTargetLabel() +
+            " | " + GetArmedDbToJsonScheduleModeLabel() +
+            Environment.NewLine +
+            "Time remaining: " + remaining.ToString(@"dd\.hh\:mm\:ss", CultureInfo.InvariantCulture);
+        _lblDbToJsonScheduleStatus.ForeColor = AccentColor;
+    }
+
+    private void UpdateDbToJsonAutomationControlState()
+    {
+        var mode = GetSelectedDbToJsonScheduleMode();
+        if (_dtDbToJsonScheduleAt is not null)
+        {
+            _dtDbToJsonScheduleAt.Enabled = mode != DbToJsonScheduleMode.EveryNMinutes;
+        }
+
+        if (_numDbToJsonScheduleIntervalMinutes is not null)
+        {
+            _numDbToJsonScheduleIntervalMinutes.Enabled = mode == DbToJsonScheduleMode.EveryNMinutes;
+        }
+    }
+
+    private DbToJsonScheduleMode GetSelectedDbToJsonScheduleMode()
+    {
+        return _cmbDbToJsonScheduleMode?.SelectedIndex switch
+        {
+            1 => DbToJsonScheduleMode.Daily,
+            2 => DbToJsonScheduleMode.EveryNMinutes,
+            _ => DbToJsonScheduleMode.OneTime
+        };
+    }
+
+    private string GetDbToJsonScheduleTargetLabel()
+    {
+        return _cmbDbToJsonScheduleTarget?.SelectedIndex switch
+        {
+            1 => "Generate Scenario 2",
+            2 => "Prepare Scenario 3 Re-run State",
+            3 => "Generate Scenarios 1 + 2",
+            _ => "Generate Scenario 1"
+        };
+    }
+
+    private string GetArmedDbToJsonScheduleModeLabel()
+    {
+        return _armedDbToJsonScheduleMode switch
+        {
+            DbToJsonScheduleMode.Daily => "repeats daily",
+            DbToJsonScheduleMode.EveryNMinutes when _dbToJsonScheduleInterval.HasValue =>
+                "every " + FormatDbToJsonIntervalLabel(_dbToJsonScheduleInterval.Value),
+            _ => "one-time"
+        };
+    }
+
+    private static DateTime ResolveNextDbToJsonScheduledRun(DateTime requestedTime)
+    {
+        while (requestedTime <= DateTime.Now)
+        {
+            requestedTime = requestedTime.AddDays(1);
+        }
+
+        return requestedTime;
+    }
+
+    private static DateTime ResolveNextDbToJsonRecurringRun(DateTime previousScheduledAt, TimeSpan interval)
+    {
+        if (interval <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(interval), "Recurring DBtoJSON interval must be greater than zero.");
+        }
+
+        var nextRun = previousScheduledAt.Add(interval);
+        while (nextRun <= DateTime.Now)
+        {
+            nextRun = nextRun.Add(interval);
+        }
+
+        return nextRun;
+    }
+
+    private DbToJsonAutomationExecutionContext CreateDbToJsonAutomationExecutionContext()
+    {
+        _dbToJsonAutomationRunSequence++;
+        if (_dbToJsonAutomationRunSequence <= 0)
+        {
+            _dbToJsonAutomationRunSequence = 1;
+        }
+
+        return new DbToJsonAutomationExecutionContext(DateTime.Now, _dbToJsonAutomationRunSequence);
+    }
+
+    private static string FormatDbToJsonIntervalLabel(TimeSpan interval)
+    {
+        var totalMinutes = Math.Max(1, (int)Math.Round(interval.TotalMinutes, MidpointRounding.AwayFromZero));
+        return totalMinutes.ToString(CultureInfo.InvariantCulture) + (totalMinutes == 1 ? " minute" : " minutes");
     }
 
     private void CreateDbToJsonTableIfMissing()
@@ -1338,25 +2577,30 @@ public partial class Form1
             EnsureSqlQueryTableExists(connection, tableName);
 
             using var transaction = connection.BeginTransaction();
-            ExecuteNonQuery(connection, transaction, "DELETE FROM " + tableName);
-
-            var baseTime = new DateTime(2026, 4, 6, 16, 0, 0);
+            var baseRowId = _settings.SqlQueryIdStart + GetSqlQueryAutomationIdOffset();
+            var maximumRowId = baseRowId + total - 1;
+            var deleted = DeleteSqlQueryRowsByIdRange(connection, transaction, tableName, baseRowId, maximumRowId);
+            var baseTime = GetSqlQueryScenario1BaseTime();
             for (var i = 0; i < total; i++)
             {
                 using var command = new SqlCommand(
                     "INSERT INTO " + tableName + " (RowId, Status, WorkCenter, EventTime, UpdatedByJob, UpdatedAt, Notes) VALUES (@id, @status, @workCenter, @eventTime, NULL, NULL, @notes)",
                     connection,
                     transaction);
-                command.Parameters.AddWithValue("@id", _settings.SqlQueryIdStart + i);
+                command.Parameters.AddWithValue("@id", baseRowId + i);
                 command.Parameters.AddWithValue("@status", i < pending ? "PENDING" : "DONE");
                 command.Parameters.AddWithValue("@workCenter", i < pending ? "LINE-A" : "LINE-B");
                 command.Parameters.AddWithValue("@eventTime", baseTime.AddMinutes(i));
-                command.Parameters.AddWithValue("@notes", "SQLQuery Seed Row " + (i + 1).ToString(CultureInfo.InvariantCulture));
+                command.Parameters.AddWithValue("@notes", "SQLQuery Seed Row " + (i + 1).ToString(CultureInfo.InvariantCulture) + GetSqlQueryAutomationStatusSuffix());
                 command.ExecuteNonQuery();
             }
 
             transaction.Commit();
-            SetSqlQueryStatus("Scenario 1 prepared " + total + " rows with UpdatedByJob and UpdatedAt left null.", SuccessColor);
+            RefreshSqlQueryScenarioTemplates();
+            SetSqlQueryStatus(
+                "Scenario 1 prepared " + total + " rows (" + pending + " PENDING, " + done + " DONE), cleared " + deleted +
+                " prior row(s) in RowId range " + baseRowId + "-" + maximumRowId + ".",
+                SuccessColor);
         }
         catch (Exception ex)
         {
@@ -1394,6 +2638,696 @@ public partial class Form1
         {
             HandleDbActionError("SQLQuery", ex);
         }
+    }
+
+    private void RefreshSqlQueryScenarioTemplates()
+    {
+        if (_txtSqlQueryScenario1UpdateSql is not null)
+        {
+            _txtSqlQueryScenario1UpdateSql.Text = BuildSqlQueryScenario1UpdateSql();
+        }
+
+        if (_txtSqlQueryScenario2InvalidSql is not null)
+        {
+            _txtSqlQueryScenario2InvalidSql.Text = BuildSqlQueryScenario2InvalidSql();
+        }
+
+        if (_txtSqlQueryScenario3BrokenConnection is not null)
+        {
+            _txtSqlQueryScenario3BrokenConnection.Text = BuildSqlQueryBrokenConnectionSample();
+        }
+    }
+
+    private void PrepareSqlQueryScenario2()
+    {
+        RefreshSqlQueryScenarioTemplates();
+        SetSqlQueryStatus("Prepared malformed SQL sample for Scenario 2.", WarningColor);
+    }
+
+    private void PrepareSqlQueryScenario3()
+    {
+        RefreshSqlQueryScenarioTemplates();
+        SetSqlQueryStatus("Prepared broken-connection guidance for Scenario 3.", WarningColor);
+    }
+
+    private string BuildSqlQueryScenario1UpdateSql()
+    {
+        var tableName = ResolveSqlQueryDisplayTableName();
+        var pending = Decimal.ToInt32(_numSqlQueryPendingRows?.Value ?? 0);
+        var total = Decimal.ToInt32(_numSqlQueryTotalRows?.Value ?? 0);
+        var baseRowId = _settings.SqlQueryIdStart + GetSqlQueryAutomationIdOffset();
+        var maxPendingRowId = pending > 0 ? baseRowId + pending - 1 : baseRowId;
+        var expectedRows = pending.ToString(CultureInfo.InvariantCulture);
+        var baseTime = GetSqlQueryScenario1BaseTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+        var finalRowId = total > 0 ? baseRowId + total - 1 : baseRowId;
+
+        return
+            "-- Expected affected rows: " + expectedRows + Environment.NewLine +
+            "-- Seeded RowId range: " + baseRowId + " to " + finalRowId + Environment.NewLine +
+            "-- Seeded EventTime base: " + baseTime + Environment.NewLine +
+            "UPDATE " + tableName + Environment.NewLine +
+            "SET Status = 'DONE'," + Environment.NewLine +
+            "    UpdatedByJob = 'DataSyncer SQLQuery'," + Environment.NewLine +
+            "    UpdatedAt = SYSUTCDATETIME()" + Environment.NewLine +
+            "WHERE Status = 'PENDING'" + Environment.NewLine +
+            "  AND WorkCenter = 'LINE-A'" + Environment.NewLine +
+            "  AND RowId BETWEEN " + baseRowId + " AND " + maxPendingRowId + ";";
+    }
+
+    private string BuildSqlQueryScenario2InvalidSql()
+    {
+        var tableName = ResolveSqlQueryDisplayTableName();
+        return
+            "-- Intentionally malformed SQL for negative-path validation" + Environment.NewLine +
+            "UPDTE " + tableName + Environment.NewLine +
+            "SET Status = 'DONE'" + Environment.NewLine +
+            "WHERE Status = 'PENDING';";
+    }
+
+    private string BuildSqlQueryBrokenConnectionSample()
+    {
+        var builder = new SqlConnectionStringBuilder();
+        if (_cmbSqlQueryConnection?.SelectedItem is ConnectionChoice choice && !string.IsNullOrWhiteSpace(choice.ConnectionString))
+        {
+            try
+            {
+                builder.ConnectionString = choice.ConnectionString;
+            }
+            catch
+            {
+                builder.DataSource = "invalid-host";
+                builder.InitialCatalog = "MissingCatalog_QA";
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(builder.DataSource))
+        {
+            builder.DataSource = "invalid-host";
+        }
+
+        if (string.IsNullOrWhiteSpace(builder.InitialCatalog))
+        {
+            builder.InitialCatalog = "MissingCatalog_QA";
+        }
+
+        builder.DataSource = "invalid-host\\BROKEN";
+        builder.InitialCatalog = "MissingCatalog_QA";
+        builder.UserID = "broken_user";
+        builder.Password = "broken_password";
+        builder.IntegratedSecurity = false;
+        builder.TrustServerCertificate = true;
+        builder.ConnectTimeout = 3;
+
+        return
+            "-- Broken SQL Server connection sample" + Environment.NewLine +
+            builder.ConnectionString + Environment.NewLine + Environment.NewLine +
+            "-- If DataSyncer exposes a DB-type selector, also switch it away from SQL Server" + Environment.NewLine +
+            "-- to verify unsupported-provider handling remains isolated to this job.";
+    }
+
+    private string ResolveSqlQueryDisplayTableName()
+    {
+        if (_txtSqlQueryTableName is null)
+        {
+            return "dbo.DS_SqlQuery_Test";
+        }
+
+        return TryNormalizeSqlTableName(_txtSqlQueryTableName.Text, out var tableName, out _, out _)
+            ? tableName
+            : _txtSqlQueryTableName.Text.Trim();
+    }
+
+    private DateTime GetSqlQueryScenario1BaseTime()
+    {
+        return _sqlQueryAutomationExecutionContext?.RunStamp ?? _dtSqlQueryEventTimeBase?.Value ?? new DateTime(2026, 4, 6, 16, 0, 0);
+    }
+
+    private int GetSqlQueryAutomationIdOffset()
+    {
+        return _sqlQueryAutomationExecutionContext is null
+            ? 0
+            : _sqlQueryAutomationExecutionContext.RunSequence * 1000;
+    }
+
+    private string GetSqlQueryAutomationStatusSuffix()
+    {
+        return _sqlQueryAutomationExecutionContext is null
+            ? string.Empty
+            : " Scheduler batch " +
+              _sqlQueryAutomationExecutionContext.RunStamp.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture) +
+              "_r" +
+              _sqlQueryAutomationExecutionContext.RunSequence.ToString("D3", CultureInfo.InvariantCulture) +
+              ".";
+    }
+
+    private void OnSqlQueryScheduleTimerTick(object? sender, EventArgs e)
+    {
+        HandleSqlQueryScheduleTick();
+    }
+
+    private void ArmSqlQuerySchedule()
+    {
+        if (_dtSqlQueryScheduleAt is null ||
+            _cmbSqlQueryScheduleMode is null ||
+            _numSqlQueryScheduleIntervalMinutes is null)
+        {
+            return;
+        }
+
+        var mode = GetSelectedSqlQueryScheduleMode();
+        var scheduledAt = mode switch
+        {
+            SqlQueryScheduleMode.Daily => ResolveNextSqlQueryScheduledRun(_dtSqlQueryScheduleAt.Value),
+            SqlQueryScheduleMode.EveryNMinutes => DateTime.Now.AddMinutes(decimal.ToDouble(_numSqlQueryScheduleIntervalMinutes.Value)),
+            _ => _dtSqlQueryScheduleAt.Value
+        };
+
+        if (mode == SqlQueryScheduleMode.OneTime && scheduledAt <= DateTime.Now)
+        {
+            MessageBox.Show(
+                "Choose a time in the future for a one-time SQLQuery automation run.",
+                "SQLQuery Scheduler",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            return;
+        }
+
+        _armedSqlQueryScheduleMode = mode;
+        _sqlQueryScheduleInterval = mode == SqlQueryScheduleMode.EveryNMinutes
+            ? TimeSpan.FromMinutes(decimal.ToDouble(_numSqlQueryScheduleIntervalMinutes.Value))
+            : null;
+        _sqlQueryScheduledRunAt = scheduledAt;
+        _sqlQueryScheduleTimer.Start();
+        UpdateSqlQueryScheduleStatus();
+        SetSqlQueryStatus(
+            "Armed SQLQuery automation for " + scheduledAt.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) +
+            " | " + GetSqlQueryScheduleTargetLabel() +
+            " | " + GetArmedSqlQueryScheduleModeLabel(),
+            SuccessColor);
+    }
+
+    private void CancelSqlQuerySchedule()
+    {
+        _sqlQueryScheduleTimer.Stop();
+        _sqlQueryScheduledRunAt = null;
+        _sqlQueryScheduleInterval = null;
+        _armedSqlQueryScheduleMode = SqlQueryScheduleMode.OneTime;
+        UpdateSqlQueryScheduleStatus();
+        SetSqlQueryStatus("Cancelled SQLQuery automation timer.", WarningColor);
+    }
+
+    private void HandleSqlQueryScheduleTick()
+    {
+        if (!_sqlQueryScheduledRunAt.HasValue)
+        {
+            _sqlQueryScheduleTimer.Stop();
+            UpdateSqlQueryScheduleStatus();
+            return;
+        }
+
+        if (DateTime.Now < _sqlQueryScheduledRunAt.Value)
+        {
+            UpdateSqlQueryScheduleStatus();
+            return;
+        }
+
+        RunSqlQueryScheduledTarget();
+
+        if (_armedSqlQueryScheduleMode == SqlQueryScheduleMode.Daily)
+        {
+            _sqlQueryScheduledRunAt = ResolveNextSqlQueryScheduledRun(_sqlQueryScheduledRunAt.Value.AddDays(1));
+            _sqlQueryScheduleTimer.Start();
+        }
+        else if (_armedSqlQueryScheduleMode == SqlQueryScheduleMode.EveryNMinutes && _sqlQueryScheduleInterval.HasValue)
+        {
+            _sqlQueryScheduledRunAt = ResolveNextSqlQueryRecurringRun(_sqlQueryScheduledRunAt.Value, _sqlQueryScheduleInterval.Value);
+            _sqlQueryScheduleTimer.Start();
+        }
+        else
+        {
+            _sqlQueryScheduleTimer.Stop();
+            _sqlQueryScheduledRunAt = null;
+            _sqlQueryScheduleInterval = null;
+        }
+
+        UpdateSqlQueryScheduleStatus();
+    }
+
+    private void RunSqlQueryScheduledTarget()
+    {
+        try
+        {
+            _sqlQueryAutomationExecutionContext = new SqlQueryAutomationExecutionContext(DateTime.Now, ++_sqlQueryAutomationRunSequence);
+            switch (_cmbSqlQueryScheduleTarget?.SelectedIndex)
+            {
+                case 1:
+                    PrepareSqlQueryScenario2();
+                    break;
+                case 2:
+                    PrepareSqlQueryScenario3();
+                    break;
+                case 3:
+                    GenerateSqlQueryScenario1();
+                    PrepareSqlQueryScenario2();
+                    PrepareSqlQueryScenario3();
+                    break;
+                default:
+                    GenerateSqlQueryScenario1();
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                "Scheduled SQLQuery preparation failed." + Environment.NewLine + Environment.NewLine + ex.Message,
+                "SQLQuery Scheduler",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+            SetSqlQueryStatus("Scheduled SQLQuery preparation failed: " + ex.Message, DangerColor);
+        }
+        finally
+        {
+            _sqlQueryAutomationExecutionContext = null;
+            RefreshSqlQueryScenarioTemplates();
+        }
+    }
+
+    private void UpdateSqlQueryScheduleStatus()
+    {
+        if (_lblSqlQueryScheduleStatus is null)
+        {
+            return;
+        }
+
+        if (!_sqlQueryScheduledRunAt.HasValue)
+        {
+            _lblSqlQueryScheduleStatus.Text = "SQLQuery scheduler idle. Choose a mode, then arm the timer.";
+            _lblSqlQueryScheduleStatus.ForeColor = MutedText;
+            return;
+        }
+
+        var remaining = _sqlQueryScheduledRunAt.Value - DateTime.Now;
+        if (remaining < TimeSpan.Zero)
+        {
+            remaining = TimeSpan.Zero;
+        }
+
+        _lblSqlQueryScheduleStatus.Text =
+            "Armed for " + _sqlQueryScheduledRunAt.Value.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) +
+            " | " + GetSqlQueryScheduleTargetLabel() +
+            " | " + GetArmedSqlQueryScheduleModeLabel() +
+            " | remaining " + remaining.ToString(@"dd\.hh\:mm\:ss", CultureInfo.InvariantCulture);
+        _lblSqlQueryScheduleStatus.ForeColor = AccentColor;
+    }
+
+    private void UpdateSqlQueryAutomationControlState()
+    {
+        var mode = GetSelectedSqlQueryScheduleMode();
+        if (_dtSqlQueryScheduleAt is not null)
+        {
+            _dtSqlQueryScheduleAt.Enabled = mode != SqlQueryScheduleMode.EveryNMinutes;
+        }
+
+        if (_numSqlQueryScheduleIntervalMinutes is not null)
+        {
+            _numSqlQueryScheduleIntervalMinutes.Enabled = mode == SqlQueryScheduleMode.EveryNMinutes;
+        }
+    }
+
+    private SqlQueryScheduleMode GetSelectedSqlQueryScheduleMode()
+    {
+        return _cmbSqlQueryScheduleMode?.SelectedIndex switch
+        {
+            1 => SqlQueryScheduleMode.Daily,
+            2 => SqlQueryScheduleMode.EveryNMinutes,
+            _ => SqlQueryScheduleMode.OneTime
+        };
+    }
+
+    private string GetSqlQueryScheduleTargetLabel()
+    {
+        return _cmbSqlQueryScheduleTarget?.SelectedIndex switch
+        {
+            1 => "Scenario 2 - Invalid SQL Sample",
+            2 => "Scenario 3 - Broken Connection Sample",
+            3 => "All SQLQuery Scenarios",
+            _ => "Scenario 1 - Scheduled Update Data"
+        };
+    }
+
+    private string GetArmedSqlQueryScheduleModeLabel()
+    {
+        return _armedSqlQueryScheduleMode switch
+        {
+            SqlQueryScheduleMode.Daily => "repeats daily",
+            SqlQueryScheduleMode.EveryNMinutes when _sqlQueryScheduleInterval.HasValue =>
+                "every " + FormatSqlQueryIntervalLabel(_sqlQueryScheduleInterval.Value),
+            _ => "one-time run"
+        };
+    }
+
+    private static DateTime ResolveNextSqlQueryScheduledRun(DateTime requestedTime)
+    {
+        var nextRun = requestedTime;
+        while (nextRun <= DateTime.Now)
+        {
+            nextRun = nextRun.AddDays(1);
+        }
+
+        return nextRun;
+    }
+
+    private static DateTime ResolveNextSqlQueryRecurringRun(DateTime previousScheduledAt, TimeSpan interval)
+    {
+        var nextRun = previousScheduledAt.Add(interval);
+        while (nextRun <= DateTime.Now)
+        {
+            nextRun = nextRun.Add(interval);
+        }
+
+        return nextRun;
+    }
+
+    private static string FormatSqlQueryIntervalLabel(TimeSpan interval)
+    {
+        var totalMinutes = Math.Max(1, Convert.ToInt32(interval.TotalMinutes));
+        return totalMinutes.ToString(CultureInfo.InvariantCulture) + " minute" + (totalMinutes == 1 ? string.Empty : "s");
+    }
+
+    private void PrepareProgramScenario1()
+    {
+        var resolvedPath = ResolveProgramPath(_txtProgramS1ScriptPath?.Text);
+        if (string.IsNullOrWhiteSpace(resolvedPath) || !File.Exists(resolvedPath))
+        {
+            UpdateProgramStatus("Script path not found: " + (resolvedPath ?? "(empty)"), DangerColor);
+            return;
+        }
+
+        if (!TryPrepareProgramOutput(_txtProgramS1OutputFile?.Text, out var outputDirectory, out var archivePath, out var errorMessage))
+        {
+            UpdateProgramStatus(errorMessage, DangerColor);
+            return;
+        }
+
+        var archiveMessage = string.IsNullOrWhiteSpace(archivePath) ? "No prior output file was present." : "Archived prior output to " + archivePath + ".";
+        UpdateProgramStatus("Scenario 1 ready. Script validated at " + resolvedPath + ", output folder prepared at " + outputDirectory + ". " + archiveMessage + GetProgramAutomationStatusSuffix(), SuccessColor);
+    }
+
+    private void PrepareProgramScenario3()
+    {
+        var resolvedPath = ResolveProgramPath(_txtProgramS3ScriptPath?.Text);
+        if (string.IsNullOrWhiteSpace(resolvedPath) || !File.Exists(resolvedPath))
+        {
+            UpdateProgramScenario3Status("Script path not found: " + (resolvedPath ?? "(empty)"), DangerColor);
+            return;
+        }
+
+        if (!TryPrepareProgramOutput(_txtProgramS3OutputFile?.Text, out var outputDirectory, out var archivePath, out var errorMessage))
+        {
+            UpdateProgramScenario3Status(errorMessage, DangerColor);
+            return;
+        }
+
+        PreviewProgramCommand();
+        var archiveMessage = string.IsNullOrWhiteSpace(archivePath) ? "No prior output file was present." : "Archived prior output to " + archivePath + ".";
+        UpdateProgramScenario3Status("Scenario 3 ready. Argument-echo script validated at " + resolvedPath + ", output folder prepared at " + outputDirectory + ". " + archiveMessage + GetProgramAutomationStatusSuffix(), SuccessColor);
+    }
+
+    private static bool TryPrepareProgramOutput(string? outputFile, out string directory, out string? archivePath, out string errorMessage)
+    {
+        directory = string.Empty;
+        archivePath = null;
+        errorMessage = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(outputFile))
+        {
+            errorMessage = "OutputFile path is required.";
+            return false;
+        }
+
+        directory = Path.GetDirectoryName(outputFile) ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(directory))
+        {
+            errorMessage = "OutputFile must include a folder path.";
+            return false;
+        }
+
+        Directory.CreateDirectory(directory);
+        if (!File.Exists(outputFile))
+        {
+            return true;
+        }
+
+        archivePath =
+            Path.Combine(
+                directory,
+                Path.GetFileNameWithoutExtension(outputFile) + "_" + DateTime.Now.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture) + Path.GetExtension(outputFile));
+        File.Move(outputFile, archivePath, overwrite: false);
+        return true;
+    }
+
+    private string GetProgramAutomationStatusSuffix()
+    {
+        return _programAutomationExecutionContext is null
+            ? string.Empty
+            : " Scheduler batch " +
+              _programAutomationExecutionContext.RunStamp.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture) +
+              "_r" +
+              _programAutomationExecutionContext.RunSequence.ToString("D3", CultureInfo.InvariantCulture) +
+              ".";
+    }
+
+    private void OnProgramScheduleTimerTick(object? sender, EventArgs e)
+    {
+        HandleProgramScheduleTick();
+    }
+
+    private void ArmProgramSchedule()
+    {
+        if (_dtProgramScheduleAt is null ||
+            _cmbProgramScheduleMode is null ||
+            _numProgramScheduleIntervalMinutes is null)
+        {
+            return;
+        }
+
+        var mode = GetSelectedProgramScheduleMode();
+        var scheduledAt = mode switch
+        {
+            ProgramScheduleMode.Daily => ResolveNextProgramScheduledRun(_dtProgramScheduleAt.Value),
+            ProgramScheduleMode.EveryNMinutes => DateTime.Now.AddMinutes(decimal.ToDouble(_numProgramScheduleIntervalMinutes.Value)),
+            _ => _dtProgramScheduleAt.Value
+        };
+
+        if (mode == ProgramScheduleMode.OneTime && scheduledAt <= DateTime.Now)
+        {
+            MessageBox.Show(
+                "Choose a time in the future for a one-time ProgramExecution automation run.",
+                "ProgramExecution Scheduler",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            return;
+        }
+
+        _armedProgramScheduleMode = mode;
+        _programScheduleInterval = mode == ProgramScheduleMode.EveryNMinutes
+            ? TimeSpan.FromMinutes(decimal.ToDouble(_numProgramScheduleIntervalMinutes.Value))
+            : null;
+        _programScheduledRunAt = scheduledAt;
+        _programScheduleTimer.Start();
+        UpdateProgramScheduleStatus();
+        UpdateProgramStatus(
+            "Armed ProgramExecution automation for " + scheduledAt.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) +
+            " | " + GetProgramScheduleTargetLabel() +
+            " | " + GetArmedProgramScheduleModeLabel(),
+            SuccessColor);
+    }
+
+    private void CancelProgramSchedule()
+    {
+        _programScheduleTimer.Stop();
+        _programScheduledRunAt = null;
+        _programScheduleInterval = null;
+        _armedProgramScheduleMode = ProgramScheduleMode.OneTime;
+        UpdateProgramScheduleStatus();
+        UpdateProgramStatus("Cancelled ProgramExecution automation timer.", WarningColor);
+    }
+
+    private void HandleProgramScheduleTick()
+    {
+        if (!_programScheduledRunAt.HasValue)
+        {
+            _programScheduleTimer.Stop();
+            UpdateProgramScheduleStatus();
+            return;
+        }
+
+        if (DateTime.Now < _programScheduledRunAt.Value)
+        {
+            UpdateProgramScheduleStatus();
+            return;
+        }
+
+        RunProgramScheduledTarget();
+
+        if (_armedProgramScheduleMode == ProgramScheduleMode.Daily)
+        {
+            _programScheduledRunAt = ResolveNextProgramScheduledRun(_programScheduledRunAt.Value.AddDays(1));
+            _programScheduleTimer.Start();
+        }
+        else if (_armedProgramScheduleMode == ProgramScheduleMode.EveryNMinutes && _programScheduleInterval.HasValue)
+        {
+            _programScheduledRunAt = ResolveNextProgramRecurringRun(_programScheduledRunAt.Value, _programScheduleInterval.Value);
+            _programScheduleTimer.Start();
+        }
+        else
+        {
+            _programScheduleTimer.Stop();
+            _programScheduledRunAt = null;
+            _programScheduleInterval = null;
+        }
+
+        UpdateProgramScheduleStatus();
+    }
+
+    private void RunProgramScheduledTarget()
+    {
+        try
+        {
+            _programAutomationExecutionContext = new ProgramAutomationExecutionContext(DateTime.Now, ++_programAutomationRunSequence);
+            switch (_cmbProgramScheduleTarget?.SelectedIndex)
+            {
+                case 1:
+                    ConfirmProgramPathMissing();
+                    break;
+                case 2:
+                    PrepareProgramScenario3();
+                    break;
+                case 3:
+                    PrepareProgramScenario1();
+                    ConfirmProgramPathMissing();
+                    PrepareProgramScenario3();
+                    break;
+                default:
+                    PrepareProgramScenario1();
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                "Scheduled ProgramExecution preparation failed." + Environment.NewLine + Environment.NewLine + ex.Message,
+                "ProgramExecution Scheduler",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+            UpdateProgramStatus("Scheduled ProgramExecution preparation failed: " + ex.Message, DangerColor);
+        }
+        finally
+        {
+            _programAutomationExecutionContext = null;
+        }
+    }
+
+    private void UpdateProgramScheduleStatus()
+    {
+        if (_lblProgramScheduleStatus is null)
+        {
+            return;
+        }
+
+        if (!_programScheduledRunAt.HasValue)
+        {
+            _lblProgramScheduleStatus.Text = "ProgramExecution scheduler idle. Choose a mode, then arm the timer.";
+            _lblProgramScheduleStatus.ForeColor = MutedText;
+            return;
+        }
+
+        var remaining = _programScheduledRunAt.Value - DateTime.Now;
+        if (remaining < TimeSpan.Zero)
+        {
+            remaining = TimeSpan.Zero;
+        }
+
+        _lblProgramScheduleStatus.Text =
+            "Armed for " + _programScheduledRunAt.Value.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) +
+            " | " + GetProgramScheduleTargetLabel() +
+            " | " + GetArmedProgramScheduleModeLabel() +
+            " | remaining " + remaining.ToString(@"dd\.hh\:mm\:ss", CultureInfo.InvariantCulture);
+        _lblProgramScheduleStatus.ForeColor = AccentColor;
+    }
+
+    private void UpdateProgramAutomationControlState()
+    {
+        var mode = GetSelectedProgramScheduleMode();
+        if (_dtProgramScheduleAt is not null)
+        {
+            _dtProgramScheduleAt.Enabled = mode != ProgramScheduleMode.EveryNMinutes;
+        }
+
+        if (_numProgramScheduleIntervalMinutes is not null)
+        {
+            _numProgramScheduleIntervalMinutes.Enabled = mode == ProgramScheduleMode.EveryNMinutes;
+        }
+    }
+
+    private ProgramScheduleMode GetSelectedProgramScheduleMode()
+    {
+        return _cmbProgramScheduleMode?.SelectedIndex switch
+        {
+            1 => ProgramScheduleMode.Daily,
+            2 => ProgramScheduleMode.EveryNMinutes,
+            _ => ProgramScheduleMode.OneTime
+        };
+    }
+
+    private string GetProgramScheduleTargetLabel()
+    {
+        return _cmbProgramScheduleTarget?.SelectedIndex switch
+        {
+            1 => "Scenario 2 - Invalid Path Check",
+            2 => "Scenario 3 - Argument Echo Prep",
+            3 => "All ProgramExecution Scenarios",
+            _ => "Scenario 1 - Successful Run Prep"
+        };
+    }
+
+    private string GetArmedProgramScheduleModeLabel()
+    {
+        return _armedProgramScheduleMode switch
+        {
+            ProgramScheduleMode.Daily => "repeats daily",
+            ProgramScheduleMode.EveryNMinutes when _programScheduleInterval.HasValue =>
+                "every " + FormatProgramIntervalLabel(_programScheduleInterval.Value),
+            _ => "one-time run"
+        };
+    }
+
+    private static DateTime ResolveNextProgramScheduledRun(DateTime requestedTime)
+    {
+        var nextRun = requestedTime;
+        while (nextRun <= DateTime.Now)
+        {
+            nextRun = nextRun.AddDays(1);
+        }
+
+        return nextRun;
+    }
+
+    private static DateTime ResolveNextProgramRecurringRun(DateTime previousScheduledAt, TimeSpan interval)
+    {
+        var nextRun = previousScheduledAt.Add(interval);
+        while (nextRun <= DateTime.Now)
+        {
+            nextRun = nextRun.Add(interval);
+        }
+
+        return nextRun;
+    }
+
+    private static string FormatProgramIntervalLabel(TimeSpan interval)
+    {
+        var totalMinutes = Math.Max(1, Convert.ToInt32(interval.TotalMinutes));
+        return totalMinutes.ToString(CultureInfo.InvariantCulture) + " minute" + (totalMinutes == 1 ? string.Empty : "s");
     }
 
     private void CreateProgramOutputFolder(TextBox? outputFileTextBox, Action<string, Color> statusUpdater)
@@ -1507,19 +3441,95 @@ public partial class Form1
             "-MessagePrefix \"" + _txtProgramS3MessagePrefix.Text.Trim().Replace("\"", "\\\"", StringComparison.Ordinal) + "\"";
 
         _txtProgramS3CommandPreview.Text = command;
-        UpdateProgramStatus("Previewed full command line.", SuccessColor);
+        UpdateProgramScenario3Status("Previewed full command line.", SuccessColor);
     }
 
     private void OpenDbToJsonOutputFolder()
     {
-        var folder = _txtDbToJsonOutputFolder?.Text.Trim();
-        if (string.IsNullOrWhiteSpace(folder))
+        var folder = EnsureDbToJsonOutputFolder();
+        if (folder is null)
         {
             return;
         }
 
-        Directory.CreateDirectory(folder);
         OpenPath(folder);
+    }
+
+    private void PrepareDbToJsonOutputFolder()
+    {
+        var folder = EnsureDbToJsonOutputFolder();
+        if (folder is null)
+        {
+            return;
+        }
+
+        SetDbToJsonStatus("Prepared DBtoJSON output folder: " + folder, SuccessColor);
+    }
+
+    private string? EnsureDbToJsonOutputFolder()
+    {
+        var folder = _txtDbToJsonOutputFolder?.Text.Trim();
+        if (string.IsNullOrWhiteSpace(folder))
+        {
+            MessageBox.Show("Set the DBtoJSON output folder first.", "DBtoJSON", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return null;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(folder);
+            return folder;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                "Unable to prepare the DBtoJSON output folder." + Environment.NewLine + Environment.NewLine + ex.Message,
+                "DBtoJSON",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+            return null;
+        }
+    }
+
+    private DateTime GetDbToJsonScenario1BaseTime()
+    {
+        return _dbToJsonAutomationExecutionContext?.RunStamp ?? _dtDbToJsonS1CreatedAtBase?.Value ?? _settings.DatetimeBase;
+    }
+
+    private DateTime GetDbToJsonScenario2BaseTime()
+    {
+        return _dbToJsonAutomationExecutionContext?.RunStamp ?? new DateTime(2026, 4, 6, 14, 30, 0);
+    }
+
+    private string GetDbToJsonOutputFolderDisplay()
+    {
+        var folder = _txtDbToJsonOutputFolder?.Text.Trim();
+        return string.IsNullOrWhiteSpace(folder) ? "(output folder not set)" : folder;
+    }
+
+    private int GetDbToJsonAutomationIdOffset()
+    {
+        return _dbToJsonAutomationExecutionContext is null
+            ? 0
+            : _dbToJsonAutomationExecutionContext.RunSequence * 1000;
+    }
+
+    private string GetDbToJsonAutomationStatusSuffix()
+    {
+        return _dbToJsonAutomationExecutionContext is null
+            ? string.Empty
+            : " Generated by scheduler batch " +
+              _dbToJsonAutomationExecutionContext.RunStamp.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture) +
+              "_r" +
+              _dbToJsonAutomationExecutionContext.RunSequence.ToString("D3", CultureInfo.InvariantCulture) +
+              ".";
+    }
+
+    private static string BuildDbToJsonPayload(int exportId, bool apiMode)
+    {
+        return apiMode
+            ? "{\"exportId\":" + exportId.ToString(CultureInfo.InvariantCulture) + ",\"destination\":\"api\"}"
+            : "{\"exportId\":" + exportId.ToString(CultureInfo.InvariantCulture) + ",\"destination\":\"file\"}";
     }
 
     private void UpdateProgramStatus(string message, Color color)
@@ -1550,6 +3560,20 @@ public partial class Form1
         RefreshLogViewer();
     }
 
+    private void UpdateProgramScenario3Status(string message, Color color)
+    {
+        if (_lblProgramS3Status is not null)
+        {
+            _lblProgramS3Status.Text = message;
+            _lblProgramS3Status.ForeColor = color;
+        }
+
+        RecordRunSummary("ProgramExecution", message, color == SuccessColor ? "Success" : color == DangerColor ? "Error" : "Info");
+        _logService.LogInfo("ProgramExecution: " + message);
+        WriteStatus(message);
+        RefreshLogViewer();
+    }
+
     private void RefreshAdvancedModuleDefaultsFromSettings()
     {
         PopulateConnectionSelectorIfReady(_cmbDbToDbConnection);
@@ -1566,6 +3590,12 @@ public partial class Form1
             _txtDbToJsonS1ExportFlag.Text = _settings.SyncFlagNotProcessed;
         }
 
+        if (_txtDbToJsonOutputFolder is not null && string.IsNullOrWhiteSpace(_txtDbToJsonOutputFolder.Text))
+        {
+            _txtDbToJsonOutputFolder.Text = Path.Combine(_settings.OutputRootFolder, "DBtoJSON", "JsonOutput");
+        }
+
+        RefreshSqlQueryScenarioTemplates();
         RefreshFileSyncerDefaultsFromSettings();
     }
 
@@ -1701,6 +3731,12 @@ public partial class Form1
         command.ExecuteNonQuery();
     }
 
+    private static int ExecuteNonQueryCount(SqlConnection connection, SqlTransaction transaction, string sql)
+    {
+        using var command = new SqlCommand(sql, connection, transaction);
+        return command.ExecuteNonQuery();
+    }
+
     private void EnsureDbToDbTablesExist(SqlConnection connection, string sourceTable, string destinationTable)
     {
         ExecuteNonQuery(connection, BuildDbToDbCreateTableSql(sourceTable));
@@ -1830,6 +3866,17 @@ END";
         }
     }
 
+    private static int DeleteDbToDbRowsByIdRange(SqlConnection connection, SqlTransaction transaction, string tableName, int minimumSourceId, int maximumSourceId)
+    {
+        using var command = new SqlCommand(
+            "DELETE FROM " + tableName + " WHERE SourceId BETWEEN @minId AND @maxId",
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("@minId", minimumSourceId);
+        command.Parameters.AddWithValue("@maxId", maximumSourceId);
+        return command.ExecuteNonQuery();
+    }
+
     private void InsertDbToJsonRows(SqlConnection connection, SqlTransaction transaction, string tableName, IReadOnlyList<DbToJsonSeedRow> rows, bool skipDuplicates)
     {
         foreach (var row in rows)
@@ -1862,6 +3909,28 @@ END";
                 }
             }
         }
+    }
+
+    private static int DeleteDbToJsonRowsByIdRange(SqlConnection connection, SqlTransaction transaction, string tableName, int minimumExportId, int maximumExportId)
+    {
+        using var command = new SqlCommand(
+            "DELETE FROM " + tableName + " WHERE ExportId BETWEEN @minId AND @maxId",
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("@minId", minimumExportId);
+        command.Parameters.AddWithValue("@maxId", maximumExportId);
+        return command.ExecuteNonQuery();
+    }
+
+    private static int DeleteSqlQueryRowsByIdRange(SqlConnection connection, SqlTransaction transaction, string tableName, int minimumRowId, int maximumRowId)
+    {
+        using var command = new SqlCommand(
+            "DELETE FROM " + tableName + " WHERE RowId BETWEEN @minId AND @maxId",
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("@minId", minimumRowId);
+        command.Parameters.AddWithValue("@maxId", maximumRowId);
+        return command.ExecuteNonQuery();
     }
 
     private int GetDbToJsonUnprocessedCount(SqlConnection connection, string tableName)
@@ -1927,6 +3996,42 @@ END";
     {
         public override string ToString() => Name;
     }
+
+    private enum DbToDbScheduleMode
+    {
+        OneTime,
+        Daily,
+        EveryNMinutes
+    }
+
+    private sealed record DbToDbAutomationExecutionContext(DateTime RunStamp, int RunSequence);
+
+    private enum DbToJsonScheduleMode
+    {
+        OneTime,
+        Daily,
+        EveryNMinutes
+    }
+
+    private sealed record DbToJsonAutomationExecutionContext(DateTime RunStamp, int RunSequence);
+
+    private enum SqlQueryScheduleMode
+    {
+        OneTime,
+        Daily,
+        EveryNMinutes
+    }
+
+    private sealed record SqlQueryAutomationExecutionContext(DateTime RunStamp, int RunSequence);
+
+    private enum ProgramScheduleMode
+    {
+        OneTime,
+        Daily,
+        EveryNMinutes
+    }
+
+    private sealed record ProgramAutomationExecutionContext(DateTime RunStamp, int RunSequence);
 
     private sealed record DbToDbSeedRow(int SourceId, string MachineCode, string WorkCenter, string SyncFlag, DateTime EventTime, string Notes);
 

@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Globalization;
 using System.Text.Json;
 
 namespace DataSyncer.TestDataGenerator.App;
@@ -22,6 +23,17 @@ public partial class Form1
     private TextBox? _txtFileSyncS2LocalTargetFolder;
     private TextBox? _txtFileSyncS3LocalFolder;
     private Label? _lblFileSyncConflictSummary;
+    private ComboBox? _cmbFileSyncScheduleMode;
+    private DateTimePicker? _dtFileSyncScheduleAt;
+    private NumericUpDown? _numFileSyncScheduleIntervalMinutes;
+    private ComboBox? _cmbFileSyncScheduleTarget;
+    private Label? _lblFileSyncScheduleStatus;
+    private readonly System.Windows.Forms.Timer _fileSyncScheduleTimer = new() { Interval = 1000 };
+    private DateTime? _fileSyncScheduledRunAt;
+    private FileSyncScheduleMode _armedFileSyncScheduleMode = FileSyncScheduleMode.OneTime;
+    private TimeSpan? _fileSyncScheduleInterval;
+    private FileSyncAutomationExecutionContext? _fileSyncAutomationExecutionContext;
+    private int _fileSyncAutomationRunSequence;
 
     private Control CreateDashboardGenerateAllCard()
     {
@@ -147,16 +159,20 @@ public partial class Form1
         }
         if (_chkGenerateAllSqlQuery?.Checked == true)
         {
-            steps.Add(("SQLQuery", GenerateSqlQueryScenario1));
+            steps.Add(("SQLQuery", () =>
+            {
+                GenerateSqlQueryScenario1();
+                PrepareSqlQueryScenario2();
+                PrepareSqlQueryScenario3();
+            }));
         }
         if (_chkGenerateAllProgramExecution?.Checked == true)
         {
             steps.Add(("ProgramExecution", () =>
             {
-                CreateProgramOutputFolder(_txtProgramS1OutputFile, UpdateProgramStatus);
-                ValidateProgramScriptPath(_txtProgramS1ScriptPath, UpdateProgramStatus);
+                PrepareProgramScenario1();
                 ConfirmProgramPathMissing();
-                PreviewProgramCommand();
+                PrepareProgramScenario3();
             }));
         }
         if (_chkGenerateAllFileSyncer?.Checked == true)
@@ -231,6 +247,7 @@ public partial class Form1
         var page = CreateScrollablePage(out var stack);
 
         stack.Controls.Add(CreateFileSyncerOverviewCard());
+        stack.Controls.Add(CreateFileSyncerAutomationCard());
         stack.Controls.Add(CreateFileSyncerScenario1Card());
         stack.Controls.Add(CreateFileSyncerScenario2Card());
         stack.Controls.Add(CreateFileSyncerScenario3Card());
@@ -243,6 +260,12 @@ public partial class Form1
     {
         var card = CreateCard("FileSyncer", "Create upload files locally, stage download files remotely, and prepare two-way conflict files with checksum details for pre-state capture.", out var content);
 
+        content.Controls.Add(CreateInfoNote(
+            "Scope note",
+            "This workspace prepares local folders and reachable remote path targets such as UNC shares or mounted locations. Native FTP/SFTP session handling, transfer retries, and protocol-specific logging are still validated in DataSyncer during the actual FileSyncer job run.",
+            AccentSoft,
+            AccentColor));
+
         _lblFileSyncStatus = new Label
         {
             Text = "No FileSyncer action has run yet.",
@@ -252,6 +275,85 @@ public partial class Form1
             Margin = new Padding(0, 8, 0, 0)
         };
         content.Controls.Add(_lblFileSyncStatus);
+        return card;
+    }
+
+    private Control CreateFileSyncerAutomationCard()
+    {
+        var card = CreateCard("FileSyncer Automation Timer", "Keep this application open and let it refresh FileSyncer test files on a timer. Repeating every N minutes is useful when DataSyncer should keep finding new upload or download candidates.", out var content);
+        var grid = CreateCsvFormGrid();
+
+        AddLabelCell(grid, "Automation mode", 0);
+        _cmbFileSyncScheduleMode = new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Anchor = AnchorStyles.Left | AnchorStyles.Right,
+            Margin = new Padding(0, 0, 12, 12),
+            AccessibleName = "FileSyncer automation mode"
+        };
+        _cmbFileSyncScheduleMode.Items.AddRange(new object[]
+        {
+            "Run Once At Selected Time",
+            "Repeat Daily At Selected Time",
+            "Repeat Every N Minutes"
+        });
+        _cmbFileSyncScheduleMode.SelectedIndex = 0;
+        _cmbFileSyncScheduleMode.SelectedIndexChanged += (_, _) => UpdateFileSyncAutomationControlState();
+        grid.Controls.Add(_cmbFileSyncScheduleMode, 1, 0);
+
+        AddLabelCell(grid, "Run at", 1);
+        _dtFileSyncScheduleAt = CreateDateTimeInput(DateTime.Now.AddMinutes(5), "Date and time used for one-time and daily FileSyncer preparation.");
+        grid.Controls.Add(_dtFileSyncScheduleAt, 1, 1);
+
+        AddLabelCell(grid, "Every N minutes", 2);
+        _numFileSyncScheduleIntervalMinutes = CreateCsvNumeric(1, 1440, 1, "Interval in minutes for recurring FileSyncer preparation.");
+        _numFileSyncScheduleIntervalMinutes.AccessibleName = "FileSyncer automation interval minutes";
+        grid.Controls.Add(_numFileSyncScheduleIntervalMinutes, 1, 2);
+
+        AddLabelCell(grid, "Timer target", 3);
+        _cmbFileSyncScheduleTarget = new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Anchor = AnchorStyles.Left | AnchorStyles.Right,
+            Margin = new Padding(0, 0, 12, 12),
+            AccessibleName = "FileSyncer automation target"
+        };
+        _cmbFileSyncScheduleTarget.Items.AddRange(new object[]
+        {
+            "Scenario 1 - Upload Files",
+            "Scenario 2 - Download Files",
+            "Scenario 3 - Two-Way Conflict Files",
+            "All FileSyncer Scenarios"
+        });
+        _cmbFileSyncScheduleTarget.SelectedIndex = 0;
+        grid.Controls.Add(_cmbFileSyncScheduleTarget, 1, 3);
+
+        content.Controls.Add(grid);
+
+        var actions = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            WrapContents = true,
+            Margin = new Padding(0, 8, 0, 0)
+        };
+        actions.Controls.Add(CreateActionButton("Arm Timer", (_, _) => ArmFileSyncSchedule(), true));
+        actions.Controls.Add(CreateActionButton("Cancel Timer", (_, _) => CancelFileSyncSchedule()));
+        actions.Controls.Add(CreateActionButton("Run Target Now", (_, _) => RunFileSyncScheduledTarget()));
+        content.Controls.Add(actions);
+
+        _lblFileSyncScheduleStatus = new Label
+        {
+            Text = "FileSyncer scheduler idle. Choose a mode, then arm the timer.",
+            AutoSize = true,
+            MaximumSize = new Size(1020, 0),
+            ForeColor = MutedText,
+            Margin = new Padding(0, 8, 0, 0)
+        };
+        content.Controls.Add(_lblFileSyncScheduleStatus);
+
+        _fileSyncScheduleTimer.Tick -= OnFileSyncScheduleTimerTick;
+        _fileSyncScheduleTimer.Tick += OnFileSyncScheduleTimerTick;
+        UpdateFileSyncAutomationControlState();
         return card;
     }
 
@@ -289,6 +391,11 @@ public partial class Form1
         actions.Controls.Add(CreateActionButton("Generate Files", (_, _) => GenerateFileSyncerScenario1(), true));
         actions.Controls.Add(CreateActionButton("Check Remote Path", (_, _) => CheckFileSyncRemotePath()));
         content.Controls.Add(actions);
+        content.Controls.Add(CreateInfoNote(
+            "Expected after job",
+            "Use these local files with a Client to Server Only FileSyncer job. After DataSyncer runs, matching files should exist on the remote side and the transfer log should report upload success.",
+            AccentSoft,
+            AccentColor));
         return card;
     }
 
@@ -313,6 +420,11 @@ public partial class Form1
         actions.Controls.Add(CreateActionButton("Verify Empty / Clear", (_, _) => VerifyOrClearDownloadFolder()));
         actions.Controls.Add(CreateActionButton("Open Local Target", (_, _) => OpenFolderFromTextBox(_txtFileSyncS2LocalTargetFolder)));
         content.Controls.Add(actions);
+        content.Controls.Add(CreateInfoNote(
+            "Expected after job",
+            "Scenario 2 keeps the local target empty and stages fresh remote files first. After DataSyncer runs in Server to Client Only mode, the expected files should appear locally and the logs should confirm download success.",
+            AccentSoft,
+            AccentColor));
         return card;
     }
 
@@ -347,6 +459,11 @@ public partial class Form1
             Margin = new Padding(0, 8, 0, 0)
         };
         content.Controls.Add(_lblFileSyncConflictSummary);
+        content.Controls.Add(CreateInfoNote(
+            "Expected after job",
+            "Use this setup for a Both Way sync run. After DataSyncer finishes, both endpoints should remain consistent with the product's sync rules, and any overwrite or conflict ordering should be visible in the logs.",
+            WarningSoft,
+            WarningColor));
         return card;
     }
 
@@ -358,20 +475,28 @@ public partial class Form1
             return;
         }
 
-        var txtPath = Path.Combine(folder, _settings.FileSyncUploadPrefix + "20260406_170000.txt");
-        var csvPath = Path.Combine(folder, _settings.FileSyncUploadPrefix + "20260406_170001.csv");
-        var jsonPath = Path.Combine(folder, _settings.FileSyncUploadPrefix + "20260406_170002.json");
+        var baseTime = GetFileSyncRunStamp();
+        var txtTime = baseTime;
+        var csvTime = baseTime.AddSeconds(1);
+        var jsonTime = baseTime.AddSeconds(2);
+        var txtPath = Path.Combine(folder, _settings.FileSyncUploadPrefix + txtTime.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture) + ".txt");
+        var csvPath = Path.Combine(folder, _settings.FileSyncUploadPrefix + csvTime.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture) + ".csv");
+        var jsonPath = Path.Combine(folder, _settings.FileSyncUploadPrefix + jsonTime.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture) + ".json");
 
-        File.WriteAllText(txtPath, "Upload file generated at 2026-04-06 17:00:00");
-        File.WriteAllText(csvPath, BuildFileSyncCsvContent());
+        File.WriteAllText(txtPath, "Upload file generated at " + txtTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + GetFileSyncAutomationStatusSuffix());
+        File.WriteAllText(csvPath, BuildFileSyncCsvContent(csvTime, "upload"));
         File.WriteAllText(jsonPath, JsonSerializer.Serialize(new[]
         {
-            new { id = 1, value = "upload-a", ts = "2026-04-06 17:00:00" },
-            new { id = 2, value = "upload-b", ts = "2026-04-06 17:00:01" },
-            new { id = 3, value = "upload-c", ts = "2026-04-06 17:00:02" }
+            new { id = 1, value = "upload-a", ts = txtTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) },
+            new { id = 2, value = "upload-b", ts = csvTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) },
+            new { id = 3, value = "upload-c", ts = jsonTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) }
         }, new JsonSerializerOptions { WriteIndented = true }));
 
-        SetFileSyncStatus("Scenario 1 generated 3 upload files in " + folder, SuccessColor);
+        File.SetLastWriteTime(txtPath, txtTime);
+        File.SetLastWriteTime(csvPath, csvTime);
+        File.SetLastWriteTime(jsonPath, jsonTime);
+
+        SetFileSyncStatus("Scenario 1 generated 3 upload files in " + folder + " for batch " + baseTime.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture) + ".", SuccessColor);
     }
 
     private void StageFileSyncerScenario2()
@@ -388,20 +513,29 @@ public partial class Form1
             return;
         }
 
-        var txtPath = Path.Combine(remoteFolder, _settings.FileSyncDownloadPrefix + "20260406_171000.txt");
-        var csvPath = Path.Combine(remoteFolder, _settings.FileSyncDownloadPrefix + "20260406_171001.csv");
-        var jsonPath = Path.Combine(remoteFolder, _settings.FileSyncDownloadPrefix + "20260406_171002.json");
+        var clearedEntries = ClearFileSyncFolderContents(localTarget);
+        var baseTime = GetFileSyncRunStamp();
+        var txtTime = baseTime;
+        var csvTime = baseTime.AddSeconds(1);
+        var jsonTime = baseTime.AddSeconds(2);
+        var txtPath = Path.Combine(remoteFolder, _settings.FileSyncDownloadPrefix + txtTime.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture) + ".txt");
+        var csvPath = Path.Combine(remoteFolder, _settings.FileSyncDownloadPrefix + csvTime.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture) + ".csv");
+        var jsonPath = Path.Combine(remoteFolder, _settings.FileSyncDownloadPrefix + jsonTime.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture) + ".json");
 
-        File.WriteAllText(txtPath, "Download file generated at 2026-04-06 17:10:00");
-        File.WriteAllText(csvPath, BuildFileSyncCsvContent());
+        File.WriteAllText(txtPath, "Download file generated at " + txtTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + GetFileSyncAutomationStatusSuffix());
+        File.WriteAllText(csvPath, BuildFileSyncCsvContent(csvTime, "download"));
         File.WriteAllText(jsonPath, JsonSerializer.Serialize(new[]
         {
-            new { id = 1, value = "download-a", ts = "2026-04-06 17:10:00" },
-            new { id = 2, value = "download-b", ts = "2026-04-06 17:10:01" },
-            new { id = 3, value = "download-c", ts = "2026-04-06 17:10:02" }
+            new { id = 1, value = "download-a", ts = txtTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) },
+            new { id = 2, value = "download-b", ts = csvTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) },
+            new { id = 3, value = "download-c", ts = jsonTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) }
         }, new JsonSerializerOptions { WriteIndented = true }));
 
-        SetFileSyncStatus("Scenario 2 staged 3 remote download files in " + remoteFolder + ". Local target: " + localTarget, SuccessColor);
+        File.SetLastWriteTime(txtPath, txtTime);
+        File.SetLastWriteTime(csvPath, csvTime);
+        File.SetLastWriteTime(jsonPath, jsonTime);
+
+        SetFileSyncStatus("Scenario 2 staged 3 remote download files in " + remoteFolder + ", and cleared " + clearedEntries + " local item(s) from " + localTarget + ".", SuccessColor);
     }
 
     private void VerifyOrClearDownloadFolder()
@@ -431,16 +565,8 @@ public partial class Form1
             return;
         }
 
-        foreach (var file in Directory.GetFiles(folder))
-        {
-            File.Delete(file);
-        }
-        foreach (var dir in Directory.GetDirectories(folder))
-        {
-            Directory.Delete(dir, recursive: true);
-        }
-
-        SetFileSyncStatus("Cleared local target folder: " + folder, SuccessColor);
+        var clearedEntries = ClearFileSyncFolderContents(folder);
+        SetFileSyncStatus("Cleared local target folder: " + folder + " (" + clearedEntries + " item(s)).", SuccessColor);
     }
 
     private void GenerateFileSyncerScenario3()
@@ -452,15 +578,26 @@ public partial class Form1
             return;
         }
 
-        var localOnly = Path.Combine(localFolder, _settings.FileSyncTwoWayPrefix + "local_only.txt");
-        var remoteOnly = Path.Combine(remoteFolder, _settings.FileSyncTwoWayPrefix + "remote_only.txt");
+        var baseTime = GetFileSyncRunStamp();
+        var batchStamp = baseTime.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture);
+        var localOnly = Path.Combine(localFolder, _settings.FileSyncTwoWayPrefix + "local_only_" + batchStamp + ".txt");
+        var remoteOnly = Path.Combine(remoteFolder, _settings.FileSyncTwoWayPrefix + "remote_only_" + batchStamp + ".txt");
         var localConflict = Path.Combine(localFolder, _settings.FileSyncTwoWayPrefix + "shared_conflict.txt");
         var remoteConflict = Path.Combine(remoteFolder, _settings.FileSyncTwoWayPrefix + "shared_conflict.txt");
 
-        File.WriteAllText(localOnly, "LOCAL ONLY file - 2026-04-06 17:20:00");
-        File.WriteAllText(remoteOnly, "REMOTE ONLY file - 2026-04-06 17:20:00");
-        File.WriteAllText(localConflict, "LOCAL VERSION 2026-04-06 17:20:00");
-        File.WriteAllText(remoteConflict, "REMOTE VERSION 2026-04-06 17:21:00");
+        var localOnlyTime = baseTime;
+        var remoteOnlyTime = baseTime.AddSeconds(5);
+        var localConflictTime = baseTime.AddSeconds(10);
+        var remoteConflictTime = baseTime.AddSeconds(20);
+
+        File.WriteAllText(localOnly, "LOCAL ONLY file - " + localOnlyTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + GetFileSyncAutomationStatusSuffix());
+        File.WriteAllText(remoteOnly, "REMOTE ONLY file - " + remoteOnlyTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + GetFileSyncAutomationStatusSuffix());
+        File.WriteAllText(localConflict, "LOCAL VERSION " + localConflictTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + GetFileSyncAutomationStatusSuffix());
+        File.WriteAllText(remoteConflict, "REMOTE VERSION " + remoteConflictTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + GetFileSyncAutomationStatusSuffix());
+        File.SetLastWriteTime(localOnly, localOnlyTime);
+        File.SetLastWriteTime(remoteOnly, remoteOnlyTime);
+        File.SetLastWriteTime(localConflict, localConflictTime);
+        File.SetLastWriteTime(remoteConflict, remoteConflictTime);
 
         var localHash = ComputeFileChecksum(localConflict);
         var remoteHash = ComputeFileChecksum(remoteConflict);
@@ -470,12 +607,279 @@ public partial class Form1
         if (_lblFileSyncConflictSummary is not null)
         {
             _lblFileSyncConflictSummary.Text =
-                "Local conflict file: " + localSize + " bytes | SHA256 " + localHash + Environment.NewLine +
-                "Remote conflict file: " + remoteSize + " bytes | SHA256 " + remoteHash;
+                "Local conflict file: " + localSize + " bytes | SHA256 " + localHash + " | LastWrite " + localConflictTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + Environment.NewLine +
+                "Remote conflict file: " + remoteSize + " bytes | SHA256 " + remoteHash + " | LastWrite " + remoteConflictTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
             _lblFileSyncConflictSummary.ForeColor = SuccessColor;
         }
 
-        SetFileSyncStatus("Scenario 3 generated all conflict files in the local and remote folders.", SuccessColor);
+        SetFileSyncStatus("Scenario 3 generated local-only, remote-only, and shared-conflict files for batch " + batchStamp + ".", SuccessColor);
+    }
+
+    private int ClearFileSyncFolderContents(string folder)
+    {
+        var cleared = 0;
+        foreach (var file in Directory.GetFiles(folder))
+        {
+            File.Delete(file);
+            cleared++;
+        }
+
+        foreach (var dir in Directory.GetDirectories(folder))
+        {
+            Directory.Delete(dir, recursive: true);
+            cleared++;
+        }
+
+        return cleared;
+    }
+
+    private DateTime GetFileSyncRunStamp()
+    {
+        return _fileSyncAutomationExecutionContext?.RunStamp ?? DateTime.Now;
+    }
+
+    private string GetFileSyncAutomationStatusSuffix()
+    {
+        return _fileSyncAutomationExecutionContext is null
+            ? string.Empty
+            : " Scheduler batch " +
+              _fileSyncAutomationExecutionContext.RunStamp.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture) +
+              "_r" +
+              _fileSyncAutomationExecutionContext.RunSequence.ToString("D3", CultureInfo.InvariantCulture) +
+              ".";
+    }
+
+    private void OnFileSyncScheduleTimerTick(object? sender, EventArgs e)
+    {
+        HandleFileSyncScheduleTick();
+    }
+
+    private void ArmFileSyncSchedule()
+    {
+        if (_dtFileSyncScheduleAt is null ||
+            _cmbFileSyncScheduleMode is null ||
+            _numFileSyncScheduleIntervalMinutes is null)
+        {
+            return;
+        }
+
+        var mode = GetSelectedFileSyncScheduleMode();
+        var scheduledAt = mode switch
+        {
+            FileSyncScheduleMode.Daily => ResolveNextFileSyncScheduledRun(_dtFileSyncScheduleAt.Value),
+            FileSyncScheduleMode.EveryNMinutes => DateTime.Now.AddMinutes(decimal.ToDouble(_numFileSyncScheduleIntervalMinutes.Value)),
+            _ => _dtFileSyncScheduleAt.Value
+        };
+
+        if (mode == FileSyncScheduleMode.OneTime && scheduledAt <= DateTime.Now)
+        {
+            MessageBox.Show(
+                "Choose a time in the future for a one-time FileSyncer automation run.",
+                "FileSyncer Scheduler",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            return;
+        }
+
+        _armedFileSyncScheduleMode = mode;
+        _fileSyncScheduleInterval = mode == FileSyncScheduleMode.EveryNMinutes
+            ? TimeSpan.FromMinutes(decimal.ToDouble(_numFileSyncScheduleIntervalMinutes.Value))
+            : null;
+        _fileSyncScheduledRunAt = scheduledAt;
+        _fileSyncScheduleTimer.Start();
+        UpdateFileSyncScheduleStatus();
+        SetFileSyncStatus(
+            "Armed FileSyncer automation for " + scheduledAt.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) +
+            " | " + GetFileSyncScheduleTargetLabel() +
+            " | " + GetArmedFileSyncScheduleModeLabel(),
+            SuccessColor);
+    }
+
+    private void CancelFileSyncSchedule()
+    {
+        _fileSyncScheduleTimer.Stop();
+        _fileSyncScheduledRunAt = null;
+        _fileSyncScheduleInterval = null;
+        _armedFileSyncScheduleMode = FileSyncScheduleMode.OneTime;
+        UpdateFileSyncScheduleStatus();
+        SetFileSyncStatus("Cancelled FileSyncer automation timer.", WarningColor);
+    }
+
+    private void HandleFileSyncScheduleTick()
+    {
+        if (!_fileSyncScheduledRunAt.HasValue)
+        {
+            _fileSyncScheduleTimer.Stop();
+            UpdateFileSyncScheduleStatus();
+            return;
+        }
+
+        if (DateTime.Now < _fileSyncScheduledRunAt.Value)
+        {
+            UpdateFileSyncScheduleStatus();
+            return;
+        }
+
+        RunFileSyncScheduledTarget();
+
+        if (_armedFileSyncScheduleMode == FileSyncScheduleMode.Daily)
+        {
+            _fileSyncScheduledRunAt = ResolveNextFileSyncScheduledRun(_fileSyncScheduledRunAt.Value.AddDays(1));
+            _fileSyncScheduleTimer.Start();
+        }
+        else if (_armedFileSyncScheduleMode == FileSyncScheduleMode.EveryNMinutes && _fileSyncScheduleInterval.HasValue)
+        {
+            _fileSyncScheduledRunAt = ResolveNextFileSyncRecurringRun(_fileSyncScheduledRunAt.Value, _fileSyncScheduleInterval.Value);
+            _fileSyncScheduleTimer.Start();
+        }
+        else
+        {
+            _fileSyncScheduleTimer.Stop();
+            _fileSyncScheduledRunAt = null;
+            _fileSyncScheduleInterval = null;
+        }
+
+        UpdateFileSyncScheduleStatus();
+    }
+
+    private void RunFileSyncScheduledTarget()
+    {
+        try
+        {
+            _fileSyncAutomationExecutionContext = new FileSyncAutomationExecutionContext(DateTime.Now, ++_fileSyncAutomationRunSequence);
+            switch (_cmbFileSyncScheduleTarget?.SelectedIndex)
+            {
+                case 1:
+                    StageFileSyncerScenario2();
+                    break;
+                case 2:
+                    GenerateFileSyncerScenario3();
+                    break;
+                case 3:
+                    GenerateFileSyncerScenario1();
+                    StageFileSyncerScenario2();
+                    GenerateFileSyncerScenario3();
+                    break;
+                default:
+                    GenerateFileSyncerScenario1();
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                "Scheduled FileSyncer preparation failed." + Environment.NewLine + Environment.NewLine + ex.Message,
+                "FileSyncer Scheduler",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+            SetFileSyncStatus("Scheduled FileSyncer preparation failed: " + ex.Message, DangerColor);
+        }
+        finally
+        {
+            _fileSyncAutomationExecutionContext = null;
+        }
+    }
+
+    private void UpdateFileSyncScheduleStatus()
+    {
+        if (_lblFileSyncScheduleStatus is null)
+        {
+            return;
+        }
+
+        if (!_fileSyncScheduledRunAt.HasValue)
+        {
+            _lblFileSyncScheduleStatus.Text = "FileSyncer scheduler idle. Choose a mode, then arm the timer.";
+            _lblFileSyncScheduleStatus.ForeColor = MutedText;
+            return;
+        }
+
+        var remaining = _fileSyncScheduledRunAt.Value - DateTime.Now;
+        if (remaining < TimeSpan.Zero)
+        {
+            remaining = TimeSpan.Zero;
+        }
+
+        _lblFileSyncScheduleStatus.Text =
+            "Armed for " + _fileSyncScheduledRunAt.Value.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) +
+            " | " + GetFileSyncScheduleTargetLabel() +
+            " | " + GetArmedFileSyncScheduleModeLabel() +
+            " | remaining " + remaining.ToString(@"dd\.hh\:mm\:ss", CultureInfo.InvariantCulture);
+        _lblFileSyncScheduleStatus.ForeColor = AccentColor;
+    }
+
+    private void UpdateFileSyncAutomationControlState()
+    {
+        var mode = GetSelectedFileSyncScheduleMode();
+        if (_dtFileSyncScheduleAt is not null)
+        {
+            _dtFileSyncScheduleAt.Enabled = mode != FileSyncScheduleMode.EveryNMinutes;
+        }
+
+        if (_numFileSyncScheduleIntervalMinutes is not null)
+        {
+            _numFileSyncScheduleIntervalMinutes.Enabled = mode == FileSyncScheduleMode.EveryNMinutes;
+        }
+    }
+
+    private FileSyncScheduleMode GetSelectedFileSyncScheduleMode()
+    {
+        return _cmbFileSyncScheduleMode?.SelectedIndex switch
+        {
+            1 => FileSyncScheduleMode.Daily,
+            2 => FileSyncScheduleMode.EveryNMinutes,
+            _ => FileSyncScheduleMode.OneTime
+        };
+    }
+
+    private string GetFileSyncScheduleTargetLabel()
+    {
+        return _cmbFileSyncScheduleTarget?.SelectedIndex switch
+        {
+            1 => "Scenario 2 - Download Files",
+            2 => "Scenario 3 - Two-Way Conflict Files",
+            3 => "All FileSyncer Scenarios",
+            _ => "Scenario 1 - Upload Files"
+        };
+    }
+
+    private string GetArmedFileSyncScheduleModeLabel()
+    {
+        return _armedFileSyncScheduleMode switch
+        {
+            FileSyncScheduleMode.Daily => "repeats daily",
+            FileSyncScheduleMode.EveryNMinutes when _fileSyncScheduleInterval.HasValue =>
+                "every " + FormatFileSyncIntervalLabel(_fileSyncScheduleInterval.Value),
+            _ => "one-time run"
+        };
+    }
+
+    private static DateTime ResolveNextFileSyncScheduledRun(DateTime requestedTime)
+    {
+        var nextRun = requestedTime;
+        while (nextRun <= DateTime.Now)
+        {
+            nextRun = nextRun.AddDays(1);
+        }
+
+        return nextRun;
+    }
+
+    private static DateTime ResolveNextFileSyncRecurringRun(DateTime previousScheduledAt, TimeSpan interval)
+    {
+        var nextRun = previousScheduledAt.Add(interval);
+        while (nextRun <= DateTime.Now)
+        {
+            nextRun = nextRun.Add(interval);
+        }
+
+        return nextRun;
+    }
+
+    private static string FormatFileSyncIntervalLabel(TimeSpan interval)
+    {
+        var totalMinutes = Math.Max(1, Convert.ToInt32(interval.TotalMinutes));
+        return totalMinutes.ToString(CultureInfo.InvariantCulture) + " minute" + (totalMinutes == 1 ? string.Empty : "s");
     }
 
     private void CheckFileSyncRemotePath()
@@ -603,14 +1007,14 @@ public partial class Form1
         RefreshLogViewer();
     }
 
-    private static string BuildFileSyncCsvContent()
+    private static string BuildFileSyncCsvContent(DateTime baseTime, string labelPrefix)
     {
         return "RecordId,Value,Timestamp" + Environment.NewLine +
-               "1,Alpha,2026-04-06 17:00:00" + Environment.NewLine +
-               "2,Beta,2026-04-06 17:00:01" + Environment.NewLine +
-               "3,Gamma,2026-04-06 17:00:02" + Environment.NewLine +
-               "4,Delta,2026-04-06 17:00:03" + Environment.NewLine +
-               "5,Epsilon,2026-04-06 17:00:04";
+               "1," + labelPrefix + "-Alpha," + baseTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + Environment.NewLine +
+               "2," + labelPrefix + "-Beta," + baseTime.AddSeconds(1).ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + Environment.NewLine +
+               "3," + labelPrefix + "-Gamma," + baseTime.AddSeconds(2).ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + Environment.NewLine +
+               "4," + labelPrefix + "-Delta," + baseTime.AddSeconds(3).ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + Environment.NewLine +
+               "5," + labelPrefix + "-Epsilon," + baseTime.AddSeconds(4).ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
     }
 
     private static string ComputeFileChecksum(string path)
@@ -620,4 +1024,13 @@ public partial class Form1
         var hash = sha.ComputeHash(stream);
         return Convert.ToHexString(hash);
     }
+
+    private enum FileSyncScheduleMode
+    {
+        OneTime,
+        Daily,
+        EveryNMinutes
+    }
+
+    private sealed record FileSyncAutomationExecutionContext(DateTime RunStamp, int RunSequence);
 }

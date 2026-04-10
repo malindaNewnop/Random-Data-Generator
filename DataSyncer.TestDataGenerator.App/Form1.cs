@@ -658,6 +658,12 @@ public partial class Form1 : Form
             Margin = new Padding(0, 4, 0, 0)
         });
 
+        content.Controls.Add(CreateInfoNote(
+            "Scope note",
+            "This workspace prepares CSV input files and recurring re-drop files. Destination table creation, temp-table cleanup, merge counts, and duplicate-skip logging are still validated in DataSyncer after it processes the generated files.",
+            AccentSoft,
+            AccentColor));
+
         return card;
     }
 
@@ -882,6 +888,11 @@ public partial class Form1 : Form
             "Destination must not already contain these RecordId values. The monitored input folder should contain only this file.",
             AccentSoft,
             AccentColor));
+        content.Controls.Add(CreateInfoNote(
+            "Expected after job",
+            "Use this file for the standard happy-path import. After DataSyncer runs, expect 20 inserted rows by default, destination-table creation if needed, temp-table cleanup, and success or merge-count details in the service log.",
+            SuccessSoft,
+            SuccessColor));
 
         return card;
     }
@@ -918,6 +929,11 @@ public partial class Form1 : Form
         content.Controls.Add(CreateInfoNote(
             "Pre-state note",
             "Mapping must be configured so the missing CSV header is optional, not required.",
+            WarningSoft,
+            WarningColor));
+        content.Controls.Add(CreateInfoNote(
+            "Expected after job",
+            "Use this file when one mapped CSV header is optional. After DataSyncer runs, required fields should import normally, the missing optional field should stay null or be skipped, and the log should mention the skipped optional column.",
             WarningSoft,
             WarningColor));
 
@@ -964,6 +980,11 @@ public partial class Form1 : Form
             "When enabled, the variant file contains 8 duplicate keys from the seed file and 2 new keys for duplicate-prevention testing.",
             AccentSoft,
             AccentColor));
+        content.Controls.Add(CreateInfoNote(
+            "Re-run path",
+            "To test the exact same CSV twice, keep Variant disabled and run Scenario 3 again after the first DataSyncer pass. The generator recreates the same seed filename and the same rows outside automation mode. Enable Variant only when you want a mixed duplicate-plus-new second pass.",
+            WarningSoft,
+            WarningColor));
 
         return card;
     }

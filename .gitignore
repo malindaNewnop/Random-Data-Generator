@@ -23,6 +23,7 @@
 *.sln.docstates
 .vs/
 logs/
+artifacts/
 #Rapid Application Development File
 rad.json
 #Translation Base-file
